@@ -43,30 +43,38 @@ export default function Home() {
             <li>Open source, reproducible builds, verifiable hashes</li>
           </ul>
         </div>
-        <div className="acct-demo" aria-hidden="true">
-          <div className="label">Your account</div>
-          <div className="num">7KQ2-M9XA-T4VH-0RWC-8JPE-3NDF-6BXR</div>
-          <div className="row">
-            <span>Name</span>
-            <b>—</b>
+        <figure className="acct-demo-wrap">
+          <div className="acct-demo" role="img" aria-label="Example of an Ashkey account, not a real one">
+            <span className="demo-tag">Example</span>
+            <span className="demo-mark" aria-hidden="true">SAMPLE</span>
+            <div className="label">What an account looks like</div>
+            <div className="num">XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX</div>
+            <div className="row">
+              <span>Name</span>
+              <b>— none</b>
+            </div>
+            <div className="row">
+              <span>Email</span>
+              <b>— none</b>
+            </div>
+            <div className="row">
+              <span>Vault</span>
+              <b>5 GB · encrypted</b>
+            </div>
+            <div className="row">
+              <span>Paid with</span>
+              <b>0.1 XMR</b>
+            </div>
+            <div className="row">
+              <span>Heritage switch</span>
+              <b>armed · 90 days</b>
+            </div>
           </div>
-          <div className="row">
-            <span>Email</span>
-            <b>—</b>
-          </div>
-          <div className="row">
-            <span>Vault</span>
-            <b>5 GB · encrypted</b>
-          </div>
-          <div className="row">
-            <span>Paid with</span>
-            <b>0.1 XMR</b>
-          </div>
-          <div className="row">
-            <span>Heritage switch</span>
-            <b>armed · 90 days</b>
-          </div>
-        </div>
+          <figcaption>
+            Illustration only. Your real account number is 28 random characters, generated in your browser when you sign up and
+            shown only to you.
+          </figcaption>
+        </figure>
       </section>
 
       <section>
