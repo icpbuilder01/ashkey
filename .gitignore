@@ -1,0 +1,6 @@
+backend/target/
+ashkey.wasm
+node_modules/
+frontend/dist/
+.icp/cache/
+.env
