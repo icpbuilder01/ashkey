@@ -45,14 +45,23 @@ export default function Vault() {
   useEffect(() => {
     if (!files) return;
     let alive = true;
-    const todo = files.filter((r) => r.f.has_thumb && r.info && !thumbs[r.f.id.toString()]);
+    // Stored previews, plus text files without one: their first lines are read
+    // straight from the (decrypted) first chunk.
+    const todo = files.filter((r) => r.info && r.f.complete && (r.f.has_thumb || kindOf(r) === "text") && !thumbs[r.f.id.toString()]);
     (async () => {
       for (let i = 0; i < todo.length && alive; i += 4) {
         const batch = await Promise.all(
           todo.slice(i, i + 4).map(async (r) => {
             try {
-              const plain = await openThumb(r.info!, ok(await api.file_thumb(r.f.id)));
-              const t: Thumb = kindOf(r) === "text" ? { text: new TextDecoder().decode(plain) } : { img: URL.createObjectURL(new Blob([plain], { type: "image/webp" })) };
+              const info = r.info!;
+              if (kindOf(r) === "text") {
+                const plain = r.f.has_thumb
+                  ? await openThumb(info, ok(await api.file_thumb(r.f.id)))
+                  : await decryptChunk(info.key, info.nonce, ok(await api.file_chunk(r.f.id, 0)), 0);
+                return [r.f.id.toString(), { text: new TextDecoder("utf-8", { fatal: false }).decode(plain.slice(0, 6000)).slice(0, 1200) } as Thumb] as const;
+              }
+              const plain = await openThumb(info, ok(await api.file_thumb(r.f.id)));
+              const t: Thumb = { img: URL.createObjectURL(new Blob([plain], { type: "image/webp" })) };
               return [r.f.id.toString(), t] as const;
             } catch {
               return null;
@@ -152,7 +161,7 @@ export default function Vault() {
   const shown = (files ?? []).filter((r) => !q || (r.info?.name ?? "").toLowerCase().includes(q));
   const tiles = shown.filter((r) => kindOf(r) !== null && r.f.complete);
   const others = shown.filter((r) => !tiles.includes(r));
-  const missing = tiles.filter((r) => !r.f.has_thumb);
+  const missing = tiles.filter((r) => !r.f.has_thumb && kindOf(r) !== "text");
   const pct = me.quota > 0n ? Number((me.used * 1000n) / me.quota) / 10 : 0;
 
   return (
