@@ -63,7 +63,7 @@ function Shell() {
       <header className="top">
         <div className="in">
           <Link to="/" className="brand">
-            <img src="/favicon.svg" alt="" /> Ashkey
+            <img src="/logo-xmr.svg" alt="" /> Ashkey
           </Link>
           {!heirPage && (
             <nav className="nav">
