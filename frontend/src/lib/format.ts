@@ -46,3 +46,9 @@ export function errText(e: unknown): string {
   const r = m.match(/Reject text: (.*)/) ?? m.match(/reject message[^:]*: (.*)/i);
   return (r ? r[1] : m).split("\n")[0];
 }
+
+/** 1500n → "$15", 1499n → "$14.99" */
+export function usd(cents: bigint | number): string {
+  const c = Number(cents);
+  return c % 100 === 0 ? `$${c / 100}` : `$${(c / 100).toFixed(2)}`;
+}

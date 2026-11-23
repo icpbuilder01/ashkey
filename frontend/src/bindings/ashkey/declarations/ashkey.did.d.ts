@@ -28,6 +28,7 @@ export interface AccountView {
 export interface FileView {
   'id' : bigint,
   'created' : bigint,
+  'has_thumb' : boolean,
   'meta' : Uint8Array,
   'size' : bigint,
   'complete' : boolean,
@@ -45,11 +46,21 @@ export interface HeirView {
   'chunks' : number,
 }
 export interface Info {
+  /**
+   * Agreed XMR rate in US cents, and when it was last confirmed (ns).
+   */
+  'xmr_usd_cents' : [] | [bigint],
+  /**
+   * Current XMR equivalents (piconero) of the USD prices; 0 when no fresh rate.
+   */
   'vault_prices' : BigUint64Array,
   'max_heirs' : number,
+  'xmr_usd_at' : [] | [bigint],
   'released_keep_sec' : bigint,
+  'quote_valid_sec' : bigint,
   'max_chunk' : bigint,
   'max_switches' : number,
+  'usd_heritage_price' : bigint,
   'heritage_grace_sec' : bigint,
   'network' : string,
   'tier_bytes' : BigUint64Array,
@@ -62,6 +73,10 @@ export interface Info {
   'min_confirmations' : number,
   'vault_grace_sec' : bigint,
   'paused' : boolean,
+  /**
+   * Yearly prices in US cents.
+   */
+  'usd_vault_prices' : BigUint64Array,
   'heritage_max_bytes' : bigint,
   'heritage_price' : bigint,
 }
@@ -74,7 +89,9 @@ export interface OrderView {
   'id' : bigint,
   'txs' : Array<string>,
   'created' : bigint,
+  'quote_until' : [] | [bigint],
   'paid' : boolean,
+  'usd_cents' : [] | [bigint],
   'address' : string,
   'amount' : bigint,
   'received' : bigint,
@@ -114,23 +131,25 @@ export type Product = {
   { 'Heritage' : null };
 export type Result = { 'Ok' : null } |
   { 'Err' : string };
-export type Result_1 = { 'Ok' : string } |
+export type Result_1 = { 'Ok' : [[] | [bigint], BigUint64Array] } |
   { 'Err' : string };
-export type Result_2 = { 'Ok' : Stats } |
+export type Result_10 = { 'Ok' : PaymentStatus } |
   { 'Err' : string };
-export type Result_3 = { 'Ok' : number } |
+export type Result_2 = { 'Ok' : string } |
   { 'Err' : string };
-export type Result_4 = { 'Ok' : OrderView } |
+export type Result_3 = { 'Ok' : Stats } |
   { 'Err' : string };
-export type Result_5 = { 'Ok' : bigint } |
+export type Result_4 = { 'Ok' : number } |
   { 'Err' : string };
-export type Result_6 = { 'Ok' : Uint8Array } |
+export type Result_5 = { 'Ok' : OrderView } |
   { 'Err' : string };
-export type Result_7 = { 'Ok' : HeirView } |
+export type Result_6 = { 'Ok' : bigint } |
   { 'Err' : string };
-export type Result_8 = { 'Ok' : Opened } |
+export type Result_7 = { 'Ok' : Uint8Array } |
   { 'Err' : string };
-export type Result_9 = { 'Ok' : PaymentStatus } |
+export type Result_8 = { 'Ok' : HeirView } |
+  { 'Err' : string };
+export type Result_9 = { 'Ok' : Opened } |
   { 'Err' : string };
 export interface Stats {
   'files' : bigint,
@@ -171,47 +190,63 @@ export interface _SERVICE {
    */
   'admin_grant' : ActorMethod<[Principal, Product, number], Result>,
   /**
+   * Reads the price sources now. Returns the agreed rate (if any) and the raw readings.
+   */
+  'admin_refresh_price' : ActorMethod<[], Result_1>,
+  /**
    * Lowers the minimum switch interval (tests only; never below 60 s). `None` restores 7 days.
    */
   'admin_set_min_interval' : ActorMethod<[[] | [bigint]], Result>,
   'admin_set_nodes' : ActorMethod<[Array<string>], Result>,
   'admin_set_params' : ActorMethod<[number, string, boolean], Result>,
-  'admin_set_prices' : ActorMethod<[BigUint64Array, bigint], Result>,
+  /**
+   * Yearly prices in US cents (vault tiers 1..3, heritage). Paid plans are not affected.
+   */
+  'admin_set_usd_prices' : ActorMethod<[BigUint64Array, bigint], Result>,
   /**
    * Sets the service wallet. Returns its main address so the operator can
    * check it matches the wallet they control.
    */
-  'admin_set_wallet' : ActorMethod<[string, string, string], Result_1>,
-  'admin_stats' : ActorMethod<[], Result_2>,
+  'admin_set_wallet' : ActorMethod<[string, string, string], Result_2>,
+  /**
+   * Emergency fallback when the feeds are down: sets the rate by hand (US cents per XMR).
+   */
+  'admin_set_xmr_rate' : ActorMethod<[bigint], Result>,
+  'admin_stats' : ActorMethod<[], Result_3>,
   /**
    * "I'm still here": pushes back every armed switch of this account.
    * Free, and works even if the plan has lapsed (it cannot push past the
    * payment grace deadline, though).
    */
-  'check_in' : ActorMethod<[], Result_3>,
-  'create_order' : ActorMethod<[Product, number], Result_4>,
-  'file_begin' : ActorMethod<[Uint8Array, bigint, number], Result_5>,
-  'file_chunk' : ActorMethod<[bigint, number], Result_6>,
+  'check_in' : ActorMethod<[], Result_4>,
+  'create_order' : ActorMethod<[Product, number], Result_5>,
+  'file_begin' : ActorMethod<[Uint8Array, bigint, number], Result_6>,
+  'file_chunk' : ActorMethod<[bigint, number], Result_7>,
   'file_commit' : ActorMethod<[bigint], Result>,
   'file_delete' : ActorMethod<[bigint], Result>,
   'file_list' : ActorMethod<[], Array<FileView>>,
   'file_put' : ActorMethod<[bigint, number, Uint8Array], Result>,
   'file_set_meta' : ActorMethod<[bigint, Uint8Array], Result>,
+  /**
+   * Stores (or replaces) the encrypted thumbnail of an image.
+   */
+  'file_set_thumb' : ActorMethod<[bigint, Uint8Array], Result>,
+  'file_thumb' : ActorMethod<[bigint], Result_7>,
   'get_info' : ActorMethod<[], Info>,
-  'heir_chunk' : ActorMethod<[bigint, Uint8Array, number], Result_6>,
-  'heir_lookup' : ActorMethod<[bigint, Uint8Array], Result_7>,
-  'heir_open' : ActorMethod<[bigint, Uint8Array, Uint8Array], Result_8>,
+  'heir_chunk' : ActorMethod<[bigint, Uint8Array, number], Result_7>,
+  'heir_lookup' : ActorMethod<[bigint, Uint8Array], Result_8>,
+  'heir_open' : ActorMethod<[bigint, Uint8Array, Uint8Array], Result_9>,
   /**
    * Fetches and caches this canister's vetKD public key for heritage.
    * Browsers also derive it offline from the IC master key and compare.
    */
-  'heritage_public_key' : ActorMethod<[], Result_6>,
+  'heritage_public_key' : ActorMethod<[], Result_7>,
   'me' : ActorMethod<[], AccountView>,
   'my_orders' : ActorMethod<[], Array<OrderView>>,
   'my_switches' : ActorMethod<[], Array<SwitchView>>,
-  'submit_payment' : ActorMethod<[bigint, string], Result_9>,
+  'submit_payment' : ActorMethod<[bigint, string], Result_10>,
   'switch_commit' : ActorMethod<[bigint], Result>,
-  'switch_create' : ActorMethod<[SwitchIn], Result_5>,
+  'switch_create' : ActorMethod<[SwitchIn], Result_6>,
   'switch_delete' : ActorMethod<[bigint], Result>,
   'switch_put' : ActorMethod<[bigint, number, Uint8Array], Result>,
   'switch_set_interval' : ActorMethod<[bigint, bigint], Result>,

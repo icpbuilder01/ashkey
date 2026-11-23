@@ -1,4 +1,5 @@
-import { bytes, xmr } from "../lib/format";
+import { XmrLogo } from "./ui";
+import { bytes, usd, xmr } from "../lib/format";
 import type { Choice } from "../lib/plans";
 import { useSession } from "../lib/session";
 
@@ -6,6 +7,7 @@ export default function PlanPicker({ choice, setChoice, years, setYears }: { cho
   const { info } = useSession();
   if (!info) return null;
   const price = (c: Choice) => (c === "h" ? info.heritage_price : info.vault_prices[Number(c[1]) - 1]);
+  const dollars = (c: Choice) => (c === "h" ? info.usd_heritage_price : info.usd_vault_prices[Number(c[1]) - 1]);
   const options: { c: Choice; title: string; sub: string }[] = [
     { c: "v1", title: `Vault ${bytes(info.tier_bytes[0])}`, sub: "Encrypted storage" },
     { c: "v2", title: `Vault ${bytes(info.tier_bytes[1])}`, sub: "Encrypted storage" },
@@ -23,7 +25,15 @@ export default function PlanPicker({ choice, setChoice, years, setYears }: { cho
               <br />
               <span className="muted">{o.sub}</span>
             </span>
-            <span className="p">{xmr(price(o.c))} XMR / yr</span>
+            <span className="p">
+              {usd(dollars(o.c))} / yr
+              {price(o.c) > 0n && (
+                <>
+                  <br />
+                  <small className="muted">≈ {xmr(price(o.c))} XMR</small>
+                </>
+              )}
+            </span>
           </label>
         ))}
       </div>
@@ -36,7 +46,13 @@ export default function PlanPicker({ choice, setChoice, years, setYears }: { cho
           ))}
         </div>
         <div>
-          Total: <b style={{ color: "var(--ember2)" }}>{xmr(price(choice) * BigInt(years))} XMR</b>
+          Total: <b style={{ color: "var(--ember2)" }}>{usd(dollars(choice) * BigInt(years))}</b>
+          {price(choice) > 0n && (
+            <span className="muted">
+              {" "}
+              ≈ <XmrLogo size={14} /> {xmr(price(choice) * BigInt(years))} XMR at today's rate
+            </span>
+          )}
         </div>
       </div>
     </>

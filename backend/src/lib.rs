@@ -15,6 +15,7 @@
 //!  - Payments are verified here with the service wallet's VIEW key only.
 //!  - Unpaid vaults self-destruct `VAULT_GRACE` after expiry.
 
+mod price;
 mod store;
 mod xmr;
 
@@ -61,12 +62,17 @@ const MAX_INTERVAL: u64 = 730 * DAY;
 /// Max ciphertext bytes per upload chunk (1 MiB of plaintext + AES-GCM overhead).
 const MAX_CHUNK: usize = 1_048_576 + 64;
 const MAX_META: usize = 4_096;
+/// Encrypted image thumbnail, made by the browser (counted in the quota).
+const MAX_THUMB: usize = 48_000;
 const MAX_FILES_PER_ACCOUNT: usize = 20_000;
 const INCOMPLETE_TTL: u64 = DAY;
 const UNPAID_ORDER_TTL: u64 = 30 * DAY;
 const MAX_PENDING_ORDERS: usize = 5;
 const HERITAGE_CONTEXT: &[u8] = b"ashkey-heritage-v1";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Default yearly prices in US cents (vault tiers 1..3, heritage).
+const DEFAULT_USD_VAULT: [u64; 3] = [1_500, 4_900, 16_900];
+const DEFAULT_USD_HERITAGE: u64 = 2_500;
 
 type R<T> = Result<T, String>;
 
@@ -124,8 +130,16 @@ pub struct Info {
     network: String,
     payments_ready: bool,
     paused: bool,
+    /// Current XMR equivalents (piconero) of the USD prices; 0 when no fresh rate.
     vault_prices: Vec<u64>,
     heritage_price: u64,
+    /// Yearly prices in US cents.
+    usd_vault_prices: Vec<u64>,
+    usd_heritage_price: u64,
+    /// Agreed XMR rate in US cents, and when it was last confirmed (ns).
+    xmr_usd_cents: Option<u64>,
+    xmr_usd_at: Option<u64>,
+    quote_valid_sec: u64,
     tier_bytes: Vec<u64>,
     min_confirmations: u32,
     vault_grace_sec: u64,
@@ -167,6 +181,8 @@ pub struct OrderView {
     created: u64,
     paid: bool,
     txs: Vec<String>,
+    usd_cents: Option<u64>,
+    quote_until: Option<u64>,
 }
 
 impl From<Order> for OrderView {
@@ -181,6 +197,8 @@ impl From<Order> for OrderView {
             created: o.created,
             paid: o.status == OrderStatus::Paid,
             txs: o.txs,
+            usd_cents: o.usd_cents,
+            quote_until: o.quote_until,
         }
     }
 }
@@ -205,6 +223,7 @@ pub struct FileView {
     chunks: u32,
     complete: bool,
     created: u64,
+    has_thumb: bool,
 }
 
 #[derive(CandidType)]
@@ -311,13 +330,28 @@ fn switch_view(s: &Switch, owner: &Account, now: u64) -> SwitchView {
     }
 }
 
-fn product_price(cfg: &Config, p: &Product) -> R<u64> {
+fn usd_vault(cfg: &Config) -> Vec<u64> {
+    cfg.usd_vault_prices.clone().unwrap_or_else(|| DEFAULT_USD_VAULT.to_vec())
+}
+
+fn usd_heritage(cfg: &Config) -> u64 {
+    cfg.usd_heritage_price.unwrap_or(DEFAULT_USD_HERITAGE)
+}
+
+/// Yearly price of a product, in US cents.
+fn product_usd(cfg: &Config, p: &Product) -> R<u64> {
     match p {
-        Product::Vault(t) if (1..=3).contains(t) => {
-            cfg.vault_prices.get((*t - 1) as usize).copied().ok_or_else(|| "No price for this tier.".into())
-        }
+        Product::Vault(t) if (1..=3).contains(t) => Ok(usd_vault(cfg)[(*t - 1) as usize]),
         Product::Vault(_) => Err("Unknown vault tier.".into()),
-        Product::Heritage => Ok(cfg.heritage_price),
+        Product::Heritage => Ok(usd_heritage(cfg)),
+    }
+}
+
+/// The XMR rate, if recent enough to sell at.
+fn fresh_rate(cfg: &Config, now: u64) -> Option<u64> {
+    match (cfg.xmr_usd_cents, cfg.xmr_usd_at) {
+        (Some(c), Some(at)) if now.saturating_sub(at) <= price::MAX_AGE_NS => Some(c),
+        _ => None,
     }
 }
 
@@ -333,8 +367,9 @@ fn apply(owner: Principal, product: &Product, years: u8, now: u64) {
             } else if a.vault_tier != 0 && a.vault_until > now {
                 // Switching tier: the unused time of the old tier is converted
                 // at the ratio of the two prices.
-                let old = cfg.vault_prices.get((a.vault_tier - 1) as usize).copied().unwrap_or(1).max(1) as u128;
-                let new = cfg.vault_prices.get((*t - 1) as usize).copied().unwrap_or(1).max(1) as u128;
+                let prices = usd_vault(&cfg);
+                let old = prices.get((a.vault_tier - 1) as usize).copied().unwrap_or(1).max(1) as u128;
+                let new = prices.get((*t - 1) as usize).copied().unwrap_or(1).max(1) as u128;
                 let credit = ((a.vault_until - now) as u128 * old / new) as u64;
                 a.vault_tier = *t;
                 a.vault_until = now + span + credit;
@@ -385,8 +420,13 @@ fn get_info() -> Info {
         network: cfg.network.clone(),
         payments_ready: xmr::view_pair(&cfg).is_ok() && cfg.nodes.len() >= 2,
         paused: cfg.paused,
-        vault_prices: cfg.vault_prices.clone(),
-        heritage_price: cfg.heritage_price,
+        vault_prices: usd_vault(&cfg).iter().map(|u| fresh_rate(&cfg, time()).map_or(0, |r| price::quote(*u, r))).collect(),
+        heritage_price: fresh_rate(&cfg, time()).map_or(0, |r| price::quote(usd_heritage(&cfg), r)),
+        usd_vault_prices: usd_vault(&cfg),
+        usd_heritage_price: usd_heritage(&cfg),
+        xmr_usd_cents: cfg.xmr_usd_cents,
+        xmr_usd_at: cfg.xmr_usd_at,
+        quote_valid_sec: price::QUOTE_NS / SEC,
         tier_bytes: TIER_BYTES.to_vec(),
         min_confirmations: cfg.min_confirmations,
         vault_grace_sec: VAULT_GRACE / SEC,
@@ -447,7 +487,8 @@ fn create_order(product: Product, years: u8) -> R<OrderView> {
     if !(1..=3).contains(&years) {
         return Err("Choose 1 to 3 years.".into());
     }
-    let price = product_price(&cfg, &product)?;
+    let usd = product_usd(&cfg, &product)? * years as u64;
+    let rate = fresh_rate(&cfg, time()).ok_or("The XMR price feed is temporarily unavailable, so new orders are paused. Please try again later.")?;
     if let (Product::Vault(t), Some(a)) = (&product, account(&p)) {
         if a.used > TIER_BYTES[(*t - 1) as usize] {
             return Err("Your vault holds more than this tier allows. Delete files first.".into());
@@ -487,12 +528,14 @@ fn create_order(product: Product, years: u8) -> R<OrderView> {
         owner: p,
         product,
         years,
-        amount: price * years as u64,
+        amount: price::quote(usd, rate),
         received: 0,
         address,
         created: now,
         status: OrderStatus::Pending,
         txs: vec![],
+        usd_cents: Some(usd),
+        quote_until: Some(now + price::QUOTE_NS),
     };
     ORDERS.with(|m| m.borrow_mut().insert(id, order.clone()));
     OWNER_ORDERS.with(|m| m.borrow_mut().insert((p, id), ()));
@@ -546,6 +589,17 @@ async fn submit_payment(order_id: u64, txid: String) -> R<PaymentStatus> {
             let mut o = ORDERS.with(|m| m.borrow().get(&order_id)).ok_or("Order not found.")?;
             if o.status == OrderStatus::Paid {
                 return Err("This order is already paid.".into());
+            }
+            // A quote is guaranteed for 24 h. Paid later: the dollar price is
+            // converted again at the current rate (if one is available).
+            let now = time();
+            if let (Some(usd), Some(until)) = (o.usd_cents, o.quote_until) {
+                if now > until {
+                    if let Some(rate) = fresh_rate(&config(), now) {
+                        o.amount = price::quote(usd, rate);
+                        o.quote_until = Some(now + price::QUOTE_NS);
+                    }
+                }
             }
             USED_TX.with(|u| u.borrow_mut().insert(txid.clone(), order_id));
             o.received = o.received.saturating_add(amount);
@@ -658,10 +712,41 @@ fn file_list() -> Vec<FileView> {
             .range((p, 0)..=(p, u64::MAX))
             .map(|e| {
                 let (k, v) = e.into_pair();
-                FileView { id: k.1, meta: v.meta, size: v.size, chunks: v.chunks, complete: v.complete, created: v.created }
+                let has_thumb = THUMBS.with(|t| t.borrow().contains_key(&k));
+                FileView { id: k.1, meta: v.meta, size: v.size, chunks: v.chunks, complete: v.complete, created: v.created, has_thumb }
             })
             .collect()
     })
+}
+
+/// Stores (or replaces) the encrypted thumbnail of an image.
+#[ic_cdk::update]
+fn file_set_thumb(id: u64, data: Vec<u8>) -> R<()> {
+    let p = caller()?;
+    let now = time();
+    let mut a = account(&p).ok_or("No vault plan on this account.")?;
+    if !vault_active(&a, now) {
+        return Err("Your vault plan is not active.".into());
+    }
+    owned_file(p, id)?;
+    if data.is_empty() || data.len() > MAX_THUMB {
+        return Err("Invalid thumbnail.".into());
+    }
+    let old = THUMBS.with(|t| t.borrow().get(&(p, id))).map_or(0, |t| t.len() as u64);
+    let used = a.used.saturating_sub(old) + data.len() as u64;
+    if used > quota(&a) {
+        return Err("Not enough space left in your vault.".into());
+    }
+    a.used = used;
+    put_account(p, a);
+    THUMBS.with(|t| t.borrow_mut().insert((p, id), data));
+    Ok(())
+}
+
+#[ic_cdk::query]
+fn file_thumb(id: u64) -> R<Vec<u8>> {
+    let p = msg_caller();
+    THUMBS.with(|t| t.borrow().get(&(p, id))).ok_or_else(|| "No thumbnail.".into())
 }
 
 #[ic_cdk::query]
@@ -675,6 +760,7 @@ fn delete_file(p: Principal, id: u64) -> u64 {
         Some(f) => f,
         None => return 0,
     };
+    let thumb = THUMBS.with(|t| t.borrow_mut().remove(&(p, id))).map_or(0, |t| t.len() as u64);
     let keys: Vec<_> = CHUNKS.with(|c| c.borrow().keys_range((p, id, 0)..=(p, id, u32::MAX)).collect());
     CHUNKS.with(|c| {
         let mut c = c.borrow_mut();
@@ -682,7 +768,7 @@ fn delete_file(p: Principal, id: u64) -> u64 {
             c.remove(&k);
         }
     });
-    f.size
+    f.size + thumb
 }
 
 #[ic_cdk::update]
@@ -1041,8 +1127,27 @@ fn maintenance_at(now: u64, over: impl Fn() -> bool) {
     }
 }
 
+async fn refresh_price() -> (Option<u64>, Vec<u64>) {
+    let (agreed, readings) = price::fetch(time() / SEC).await;
+    let now = time();
+    update_config(|c| {
+        c.xmr_usd_readings = Some(readings.clone());
+        if let Some(r) = agreed {
+            c.xmr_usd_cents = Some(r);
+            c.xmr_usd_at = Some(now);
+        }
+    });
+    (agreed, readings)
+}
+
 fn start_timers() {
     ic_cdk_timers::set_timer_interval(Duration::from_secs(600), || async { maintenance() });
+    ic_cdk_timers::set_timer_interval(Duration::from_secs(1800), || async {
+        refresh_price().await;
+    });
+    ic_cdk_timers::set_timer(Duration::from_secs(5), async {
+        refresh_price().await;
+    });
 }
 
 #[ic_cdk::init]
@@ -1065,6 +1170,21 @@ fn transform_tx(args: TransformArgs) -> HttpRequestResult {
 #[ic_cdk::query(hidden = true)]
 fn transform_header(args: TransformArgs) -> HttpRequestResult {
     xmr::transform_header(args)
+}
+
+#[ic_cdk::query(hidden = true)]
+fn transform_kraken(args: TransformArgs) -> HttpRequestResult {
+    price::transform_kraken(args)
+}
+
+#[ic_cdk::query(hidden = true)]
+fn transform_kucoin(args: TransformArgs) -> HttpRequestResult {
+    price::transform_kucoin(args)
+}
+
+#[ic_cdk::query(hidden = true)]
+fn transform_coingecko(args: TransformArgs) -> HttpRequestResult {
+    price::transform_coingecko(args)
 }
 
 // ---------------------------------------------------------------- admin (controllers)
@@ -1102,15 +1222,38 @@ fn admin_set_nodes(nodes: Vec<String>) -> R<()> {
     Ok(())
 }
 
+/// Yearly prices in US cents (vault tiers 1..3, heritage). Paid plans are not affected.
 #[ic_cdk::update]
-fn admin_set_prices(vault: Vec<u64>, heritage: u64) -> R<()> {
+fn admin_set_usd_prices(vault: Vec<u64>, heritage: u64) -> R<()> {
     admin()?;
     if vault.len() != 3 || vault.iter().any(|v| *v == 0) || heritage == 0 {
-        return Err("Three non-zero vault prices and a heritage price.".into());
+        return Err("Three non-zero vault prices and a heritage price, in US cents.".into());
     }
     update_config(|c| {
-        c.vault_prices = vault;
-        c.heritage_price = heritage;
+        c.usd_vault_prices = Some(vault);
+        c.usd_heritage_price = Some(heritage);
+    });
+    Ok(())
+}
+
+/// Reads the price sources now. Returns the agreed rate (if any) and the raw readings.
+#[ic_cdk::update]
+async fn admin_refresh_price() -> R<(Option<u64>, Vec<u64>)> {
+    admin()?;
+    Ok(refresh_price().await)
+}
+
+/// Emergency fallback when the feeds are down: sets the rate by hand (US cents per XMR).
+#[ic_cdk::update]
+fn admin_set_xmr_rate(cents: u64) -> R<()> {
+    admin()?;
+    if !(100..=10_000_000).contains(&cents) {
+        return Err("Rate in US cents per XMR, between $1 and $100,000.".into());
+    }
+    let now = time();
+    update_config(|c| {
+        c.xmr_usd_cents = Some(cents);
+        c.xmr_usd_at = Some(now);
     });
     Ok(())
 }
@@ -1137,7 +1280,7 @@ fn admin_set_params(min_confirmations: u32, key_name: String, paused: bool) -> R
 #[ic_cdk::update]
 fn admin_grant(account: Principal, product: Product, years: u8) -> R<()> {
     admin()?;
-    product_price(&config(), &product)?;
+    product_usd(&config(), &product)?;
     if !(1..=3).contains(&years) {
         return Err("1 to 3 years.".into());
     }

@@ -112,11 +112,11 @@ fn renewing_and_switching_tiers() {
     // Same tier: extends.
     apply(p, &Product::Vault(1), 2, now);
     assert_eq!(account(&p).unwrap().vault_until, now + 3 * YEAR);
-    // Upgrade to tier 2 with 3 years of tier 1 left: 3y * 0.03/0.10 = 0.9y credit.
+    // Upgrade to tier 2 with 3 years of tier 1 left: credit = 3y * $15 / $49.
     apply(p, &Product::Vault(2), 1, now);
     let a = account(&p).unwrap();
     assert_eq!(a.vault_tier, 2);
-    assert_eq!(a.vault_until, now + YEAR + (3 * YEAR) * 30 / 100);
+    assert_eq!(a.vault_until, now + YEAR + ((3 * YEAR) as u128 * 1_500 / 4_900) as u64);
     // Heritage is independent.
     apply(p, &Product::Heritage, 1, now);
     assert_eq!(account(&p).unwrap().heritage_until, now + YEAR);
@@ -179,7 +179,11 @@ fn unpaid_vaults_self_destruct_after_grace_only() {
     for (i, p) in [paid, grace, gone].into_iter().enumerate() {
         put_test_file(p, 100 + i as u64, 3);
     }
+    THUMBS.with(|t| t.borrow_mut().insert((gone, 102), vec![7; 20]));
+    THUMBS.with(|t| t.borrow_mut().insert((paid, 100), vec![7; 20]));
     maintenance_at(now, || false);
+    assert!(THUMBS.with(|t| t.borrow().get(&(gone, 102)).is_none()), "thumbnail destroyed with the file");
+    assert!(THUMBS.with(|t| t.borrow().get(&(paid, 100)).is_some()));
     let chunks_of = |p: Principal| CHUNKS.with(|c| c.borrow().keys_range((p, 0, 0)..=(p, u64::MAX, u32::MAX)).count());
     assert_eq!(chunks_of(paid), 3, "paid vault untouched");
     assert_eq!(chunks_of(grace), 3, "still in grace: readable");
@@ -226,4 +230,37 @@ fn released_switches_are_destroyed_after_keep_period() {
     assert!(SWITCHES.with(|m| m.borrow().get(&501).is_some()));
     assert!(SWITCHES.with(|m| m.borrow().get(&502).is_none()));
     assert!(SWITCH_CHUNKS.with(|c| c.borrow().get(&(502, 0)).is_none()));
+}
+
+#[test]
+fn usd_quotes_round_up_to_a_ten_thousandth() {
+    // $15 at $492.61/XMR = 0.030449... → 0.0305 XMR
+    assert_eq!(price::quote(1_500, 49_261), 30_500_000_000);
+    // exact amounts stay exact
+    assert_eq!(price::quote(50_000, 50_000), 1_000_000_000_000);
+    assert_eq!(price::quote(1, 49_261) % price::ROUND_PICO, 0);
+}
+
+#[test]
+fn price_sources_must_agree() {
+    assert_eq!(price::combine(&[49_261, 49_311, 49_100]), Some(49_100), "all agree: lowest");
+    assert_eq!(price::combine(&[49_261, 60_000]), None, "two sources 20 % apart: refuse");
+    assert_eq!(price::combine(&[10_000, 49_261, 49_311]), Some(49_261), "outlier ignored");
+    assert_eq!(price::combine(&[49_261]), None, "one source is not enough");
+    assert_eq!(price::combine(&[]), None);
+}
+
+#[test]
+fn price_transforms_pick_the_last_closed_candle() {
+    let kraken = r#"{"error":[],"result":{"XXMRZUSD":[[1795464000,"502.39","503.93","493.11","496.10","497.72","694.3",853],[1795467600,"496.10","498.29","489.42","492.61","492.48","688.9",674],[1795471200,"492.58","492.64","484.34","484.34","489.02","319.4",467]],"last":1795467600}}"#;
+    let v: serde_json::Value = serde_json::from_slice(&price::transform_kraken(args(kraken)).body).unwrap();
+    assert_eq!(v["cents"], 49_261);
+    let kucoin = r#"{"code":"200000","data":[["1795471200","493.25","484.77","493.68","484.1","2863","1399780"],["1795467600","496.95","493.11","499.19","489.53","2368","1168762"]]}"#;
+    let v: serde_json::Value = serde_json::from_slice(&price::transform_kucoin(args(kucoin)).body).unwrap();
+    assert_eq!(v["cents"], 49_311);
+    let gecko = "[[1795388400000,492.09,493.35,490.86,492.87],[1795390200000,492.9,495.13,492.9,494.45],[1795392000000,494.45,494.89,492.96,493.91]]";
+    let v: serde_json::Value = serde_json::from_slice(&price::transform_coingecko(args(gecko)).body).unwrap();
+    assert_eq!(v["cents"], 49_445);
+    let v: serde_json::Value = serde_json::from_slice(&price::transform_kraken(args("<html>rate limited")).body).unwrap();
+    assert_eq!(v["none"], true);
 }

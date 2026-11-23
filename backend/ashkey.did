@@ -14,6 +14,7 @@ type AccountView = record {
 type FileView = record {
   id : nat64;
   created : nat64;
+  has_thumb : bool;
   meta : blob;
   size : nat64;
   complete : bool;
@@ -28,11 +29,17 @@ type HeirView = record {
   chunks : nat32;
 };
 type Info = record {
+  // Agreed XMR rate in US cents, and when it was last confirmed (ns).
+  xmr_usd_cents : opt nat64;
+  // Current XMR equivalents (piconero) of the USD prices; 0 when no fresh rate.
   vault_prices : vec nat64;
   max_heirs : nat32;
+  xmr_usd_at : opt nat64;
   released_keep_sec : nat64;
+  quote_valid_sec : nat64;
   max_chunk : nat64;
   max_switches : nat32;
+  usd_heritage_price : nat64;
   heritage_grace_sec : nat64;
   network : text;
   tier_bytes : vec nat64;
@@ -45,6 +52,8 @@ type Info = record {
   min_confirmations : nat32;
   vault_grace_sec : nat64;
   paused : bool;
+  // Yearly prices in US cents.
+  usd_vault_prices : vec nat64;
   heritage_max_bytes : nat64;
   heritage_price : nat64;
 };
@@ -57,7 +66,9 @@ type OrderView = record {
   id : nat64;
   txs : vec text;
   created : nat64;
+  quote_until : opt nat64;
   paid : bool;
+  usd_cents : opt nat64;
   address : text;
   amount : nat64;
   received : nat64;
@@ -80,15 +91,16 @@ type Product = variant {
   Heritage;
 };
 type Result = variant { Ok; Err : text };
-type Result_1 = variant { Ok : text; Err : text };
-type Result_2 = variant { Ok : Stats; Err : text };
-type Result_3 = variant { Ok : nat32; Err : text };
-type Result_4 = variant { Ok : OrderView; Err : text };
-type Result_5 = variant { Ok : nat64; Err : text };
-type Result_6 = variant { Ok : blob; Err : text };
-type Result_7 = variant { Ok : HeirView; Err : text };
-type Result_8 = variant { Ok : Opened; Err : text };
-type Result_9 = variant { Ok : PaymentStatus; Err : text };
+type Result_1 = variant { Ok : record { opt nat64; vec nat64 }; Err : text };
+type Result_10 = variant { Ok : PaymentStatus; Err : text };
+type Result_2 = variant { Ok : text; Err : text };
+type Result_3 = variant { Ok : Stats; Err : text };
+type Result_4 = variant { Ok : nat32; Err : text };
+type Result_5 = variant { Ok : OrderView; Err : text };
+type Result_6 = variant { Ok : nat64; Err : text };
+type Result_7 = variant { Ok : blob; Err : text };
+type Result_8 = variant { Ok : HeirView; Err : text };
+type Result_9 = variant { Ok : Opened; Err : text };
 type Stats = record {
   files : nat64;
   switches : nat64;
@@ -125,40 +137,48 @@ service : () -> {
   // Gives a plan without payment (support cases, tests). It can only add time
   // to an account; it cannot read or move anything.
   admin_grant : (principal, Product, nat8) -> (Result);
+  // Reads the price sources now. Returns the agreed rate (if any) and the raw readings.
+  admin_refresh_price : () -> (Result_1);
   // Lowers the minimum switch interval (tests only; never below 60 s). `None` restores 7 days.
   admin_set_min_interval : (opt nat64) -> (Result);
   admin_set_nodes : (vec text) -> (Result);
   admin_set_params : (nat32, text, bool) -> (Result);
-  admin_set_prices : (vec nat64, nat64) -> (Result);
+  // Yearly prices in US cents (vault tiers 1..3, heritage). Paid plans are not affected.
+  admin_set_usd_prices : (vec nat64, nat64) -> (Result);
   // Sets the service wallet. Returns its main address so the operator can
   // check it matches the wallet they control.
-  admin_set_wallet : (text, text, text) -> (Result_1);
-  admin_stats : () -> (Result_2) query;
+  admin_set_wallet : (text, text, text) -> (Result_2);
+  // Emergency fallback when the feeds are down: sets the rate by hand (US cents per XMR).
+  admin_set_xmr_rate : (nat64) -> (Result);
+  admin_stats : () -> (Result_3) query;
   // "I'm still here": pushes back every armed switch of this account.
   // Free, and works even if the plan has lapsed (it cannot push past the
   // payment grace deadline, though).
-  check_in : () -> (Result_3);
-  create_order : (Product, nat8) -> (Result_4);
-  file_begin : (blob, nat64, nat32) -> (Result_5);
-  file_chunk : (nat64, nat32) -> (Result_6) query;
+  check_in : () -> (Result_4);
+  create_order : (Product, nat8) -> (Result_5);
+  file_begin : (blob, nat64, nat32) -> (Result_6);
+  file_chunk : (nat64, nat32) -> (Result_7) query;
   file_commit : (nat64) -> (Result);
   file_delete : (nat64) -> (Result);
   file_list : () -> (vec FileView) query;
   file_put : (nat64, nat32, blob) -> (Result);
   file_set_meta : (nat64, blob) -> (Result);
+  // Stores (or replaces) the encrypted thumbnail of an image.
+  file_set_thumb : (nat64, blob) -> (Result);
+  file_thumb : (nat64) -> (Result_7) query;
   get_info : () -> (Info) query;
-  heir_chunk : (nat64, blob, nat32) -> (Result_6) query;
-  heir_lookup : (nat64, blob) -> (Result_7) query;
-  heir_open : (nat64, blob, blob) -> (Result_8);
+  heir_chunk : (nat64, blob, nat32) -> (Result_7) query;
+  heir_lookup : (nat64, blob) -> (Result_8) query;
+  heir_open : (nat64, blob, blob) -> (Result_9);
   // Fetches and caches this canister's vetKD public key for heritage.
   // Browsers also derive it offline from the IC master key and compare.
-  heritage_public_key : () -> (Result_6);
+  heritage_public_key : () -> (Result_7);
   me : () -> (AccountView) query;
   my_orders : () -> (vec OrderView) query;
   my_switches : () -> (vec SwitchView) query;
-  submit_payment : (nat64, text) -> (Result_9);
+  submit_payment : (nat64, text) -> (Result_10);
   switch_commit : (nat64) -> (Result);
-  switch_create : (SwitchIn) -> (Result_5);
+  switch_create : (SwitchIn) -> (Result_6);
   switch_delete : (nat64) -> (Result);
   switch_put : (nat64, nat32, blob) -> (Result);
   switch_set_interval : (nat64, nat64) -> (Result);

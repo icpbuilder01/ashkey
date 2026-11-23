@@ -69,6 +69,7 @@ export interface AccountView {
 export interface FileView {
     id: bigint;
     created: bigint;
+    has_thumb: boolean;
     meta: Uint8Array;
     size: bigint;
     complete: boolean;
@@ -86,11 +87,21 @@ export interface HeirView {
     chunks: number;
 }
 export interface Info {
+    /**
+     * Agreed XMR rate in US cents, and when it was last confirmed (ns).
+     */
+    xmr_usd_cents?: bigint;
+    /**
+     * Current XMR equivalents (piconero) of the USD prices; 0 when no fresh rate.
+     */
     vault_prices: BigUint64Array;
     max_heirs: number;
+    xmr_usd_at?: bigint;
     released_keep_sec: bigint;
+    quote_valid_sec: bigint;
     max_chunk: bigint;
     max_switches: number;
+    usd_heritage_price: bigint;
     heritage_grace_sec: bigint;
     network: string;
     tier_bytes: BigUint64Array;
@@ -103,6 +114,10 @@ export interface Info {
     min_confirmations: number;
     vault_grace_sec: bigint;
     paused: boolean;
+    /**
+     * Yearly prices in US cents.
+     */
+    usd_vault_prices: BigUint64Array;
     heritage_max_bytes: bigint;
     heritage_price: bigint;
 }
@@ -115,7 +130,9 @@ export interface OrderView {
     id: bigint;
     txs: Array<string>;
     created: bigint;
+    quote_until?: bigint;
     paid: boolean;
+    usd_cents?: bigint;
     address: string;
     amount: bigint;
     received: bigint;
@@ -172,63 +189,70 @@ export type Result = {
 };
 export type Result_1 = {
     __kind__: "Ok";
-    Ok: string;
+    Ok: [bigint | null, BigUint64Array];
+} | {
+    __kind__: "Err";
+    Err: string;
+};
+export type Result_10 = {
+    __kind__: "Ok";
+    Ok: PaymentStatus;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_2 = {
     __kind__: "Ok";
-    Ok: Stats;
+    Ok: string;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_3 = {
     __kind__: "Ok";
-    Ok: number;
+    Ok: Stats;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_4 = {
     __kind__: "Ok";
-    Ok: OrderView;
+    Ok: number;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_5 = {
     __kind__: "Ok";
-    Ok: bigint;
+    Ok: OrderView;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_6 = {
     __kind__: "Ok";
-    Ok: Uint8Array;
+    Ok: bigint;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_7 = {
     __kind__: "Ok";
-    Ok: HeirView;
+    Ok: Uint8Array;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_8 = {
     __kind__: "Ok";
-    Ok: Opened;
+    Ok: HeirView;
 } | {
     __kind__: "Err";
     Err: string;
 };
 export type Result_9 = {
     __kind__: "Ok";
-    Ok: PaymentStatus;
+    Ok: Opened;
 } | {
     __kind__: "Err";
     Err: string;
@@ -267,45 +291,53 @@ export interface SwitchView {
 }
 export interface ashkeyInterface {
     admin_grant(arg0: Principal, arg1: Product, arg2: number): Promise<Result>;
+    admin_refresh_price(): Promise<Result_1>;
     admin_set_min_interval(arg0: bigint | null): Promise<Result>;
     admin_set_nodes(arg0: Array<string>): Promise<Result>;
     admin_set_params(arg0: number, arg1: string, arg2: boolean): Promise<Result>;
-    admin_set_prices(arg0: BigUint64Array, arg1: bigint): Promise<Result>;
-    admin_set_wallet(arg0: string, arg1: string, arg2: string): Promise<Result_1>;
-    admin_stats(): Promise<Result_2>;
-    check_in(): Promise<Result_3>;
-    create_order(arg0: Product, arg1: number): Promise<Result_4>;
-    file_begin(arg0: Uint8Array, arg1: bigint, arg2: number): Promise<Result_5>;
-    file_chunk(arg0: bigint, arg1: number): Promise<Result_6>;
+    admin_set_usd_prices(arg0: BigUint64Array, arg1: bigint): Promise<Result>;
+    admin_set_wallet(arg0: string, arg1: string, arg2: string): Promise<Result_2>;
+    admin_set_xmr_rate(arg0: bigint): Promise<Result>;
+    admin_stats(): Promise<Result_3>;
+    check_in(): Promise<Result_4>;
+    create_order(arg0: Product, arg1: number): Promise<Result_5>;
+    file_begin(arg0: Uint8Array, arg1: bigint, arg2: number): Promise<Result_6>;
+    file_chunk(arg0: bigint, arg1: number): Promise<Result_7>;
     file_commit(arg0: bigint): Promise<Result>;
     file_delete(arg0: bigint): Promise<Result>;
     file_list(): Promise<Array<FileView>>;
     file_put(arg0: bigint, arg1: number, arg2: Uint8Array): Promise<Result>;
     file_set_meta(arg0: bigint, arg1: Uint8Array): Promise<Result>;
+    file_set_thumb(arg0: bigint, arg1: Uint8Array): Promise<Result>;
+    file_thumb(arg0: bigint): Promise<Result_7>;
     get_info(): Promise<Info>;
-    heir_chunk(arg0: bigint, arg1: Uint8Array, arg2: number): Promise<Result_6>;
-    heir_lookup(arg0: bigint, arg1: Uint8Array): Promise<Result_7>;
-    heir_open(arg0: bigint, arg1: Uint8Array, arg2: Uint8Array): Promise<Result_8>;
-    heritage_public_key(): Promise<Result_6>;
+    heir_chunk(arg0: bigint, arg1: Uint8Array, arg2: number): Promise<Result_7>;
+    heir_lookup(arg0: bigint, arg1: Uint8Array): Promise<Result_8>;
+    heir_open(arg0: bigint, arg1: Uint8Array, arg2: Uint8Array): Promise<Result_9>;
+    heritage_public_key(): Promise<Result_7>;
     me(): Promise<AccountView>;
     my_orders(): Promise<Array<OrderView>>;
     my_switches(): Promise<Array<SwitchView>>;
-    submit_payment(arg0: bigint, arg1: string): Promise<Result_9>;
+    submit_payment(arg0: bigint, arg1: string): Promise<Result_10>;
     switch_commit(arg0: bigint): Promise<Result>;
-    switch_create(arg0: SwitchIn): Promise<Result_5>;
+    switch_create(arg0: SwitchIn): Promise<Result_6>;
     switch_delete(arg0: bigint): Promise<Result>;
     switch_put(arg0: bigint, arg1: number, arg2: Uint8Array): Promise<Result>;
     switch_set_interval(arg0: bigint, arg1: bigint): Promise<Result>;
 }
-import type { AccountView as _AccountView, HeirView as _HeirView, Info as _Info, Opened as _Opened, OrderView as _OrderView, PaymentStatus as _PaymentStatus, Product as _Product, Result as _Result, Result_1 as _Result_1, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Stats as _Stats } from "./declarations/ashkey.did";
+import type { AccountView as _AccountView, HeirView as _HeirView, Info as _Info, Opened as _Opened, OrderView as _OrderView, PaymentStatus as _PaymentStatus, Product as _Product, Result as _Result, Result_1 as _Result_1, Result_10 as _Result_10, Result_2 as _Result_2, Result_3 as _Result_3, Result_4 as _Result_4, Result_5 as _Result_5, Result_6 as _Result_6, Result_7 as _Result_7, Result_8 as _Result_8, Result_9 as _Result_9, Stats as _Stats } from "./declarations/ashkey.did";
 export class Ashkey implements ashkeyInterface {
     constructor(private actor: ActorSubclass<_SERVICE>){}
     async admin_grant(arg0: Principal, arg1: Product, arg2: number): Promise<Result> {
         const result = await this.actor.admin_grant(arg0, to_candid_Product_n1(arg1), arg2);
         return from_candid_Result_n3(result);
     }
+    async admin_refresh_price(): Promise<Result_1> {
+        const result = await this.actor.admin_refresh_price();
+        return from_candid_Result_1_n5(result);
+    }
     async admin_set_min_interval(arg0: bigint | null): Promise<Result> {
-        const result = await this.actor.admin_set_min_interval(to_candid_opt_n5(arg0));
+        const result = await this.actor.admin_set_min_interval(to_candid_opt_n9(arg0));
         return from_candid_Result_n3(result);
     }
     async admin_set_nodes(arg0: Array<string>): Promise<Result> {
@@ -316,33 +348,37 @@ export class Ashkey implements ashkeyInterface {
         const result = await this.actor.admin_set_params(arg0, arg1, arg2);
         return from_candid_Result_n3(result);
     }
-    async admin_set_prices(arg0: BigUint64Array, arg1: bigint): Promise<Result> {
-        const result = await this.actor.admin_set_prices(arg0, arg1);
+    async admin_set_usd_prices(arg0: BigUint64Array, arg1: bigint): Promise<Result> {
+        const result = await this.actor.admin_set_usd_prices(arg0, arg1);
         return from_candid_Result_n3(result);
     }
-    async admin_set_wallet(arg0: string, arg1: string, arg2: string): Promise<Result_1> {
+    async admin_set_wallet(arg0: string, arg1: string, arg2: string): Promise<Result_2> {
         const result = await this.actor.admin_set_wallet(arg0, arg1, arg2);
-        return from_candid_Result_1_n6(result);
+        return from_candid_Result_2_n10(result);
     }
-    async admin_stats(): Promise<Result_2> {
+    async admin_set_xmr_rate(arg0: bigint): Promise<Result> {
+        const result = await this.actor.admin_set_xmr_rate(arg0);
+        return from_candid_Result_n3(result);
+    }
+    async admin_stats(): Promise<Result_3> {
         const result = await this.actor.admin_stats();
-        return from_candid_Result_2_n8(result);
+        return from_candid_Result_3_n12(result);
     }
-    async check_in(): Promise<Result_3> {
+    async check_in(): Promise<Result_4> {
         const result = await this.actor.check_in();
-        return from_candid_Result_3_n10(result);
+        return from_candid_Result_4_n14(result);
     }
-    async create_order(arg0: Product, arg1: number): Promise<Result_4> {
+    async create_order(arg0: Product, arg1: number): Promise<Result_5> {
         const result = await this.actor.create_order(to_candid_Product_n1(arg0), arg1);
-        return from_candid_Result_4_n12(result);
+        return from_candid_Result_5_n16(result);
     }
-    async file_begin(arg0: Uint8Array, arg1: bigint, arg2: number): Promise<Result_5> {
+    async file_begin(arg0: Uint8Array, arg1: bigint, arg2: number): Promise<Result_6> {
         const result = await this.actor.file_begin(arg0, arg1, arg2);
-        return from_candid_Result_5_n18(result);
+        return from_candid_Result_6_n22(result);
     }
-    async file_chunk(arg0: bigint, arg1: number): Promise<Result_6> {
+    async file_chunk(arg0: bigint, arg1: number): Promise<Result_7> {
         const result = await this.actor.file_chunk(arg0, arg1);
-        return from_candid_Result_6_n20(result);
+        return from_candid_Result_7_n24(result);
     }
     async file_commit(arg0: bigint): Promise<Result> {
         const result = await this.actor.file_commit(arg0);
@@ -364,49 +400,57 @@ export class Ashkey implements ashkeyInterface {
         const result = await this.actor.file_set_meta(arg0, arg1);
         return from_candid_Result_n3(result);
     }
+    async file_set_thumb(arg0: bigint, arg1: Uint8Array): Promise<Result> {
+        const result = await this.actor.file_set_thumb(arg0, arg1);
+        return from_candid_Result_n3(result);
+    }
+    async file_thumb(arg0: bigint): Promise<Result_7> {
+        const result = await this.actor.file_thumb(arg0);
+        return from_candid_Result_7_n24(result);
+    }
     async get_info(): Promise<Info> {
         const result = await this.actor.get_info();
-        return from_candid_Info_n22(result);
+        return from_candid_Info_n26(result);
     }
-    async heir_chunk(arg0: bigint, arg1: Uint8Array, arg2: number): Promise<Result_6> {
+    async heir_chunk(arg0: bigint, arg1: Uint8Array, arg2: number): Promise<Result_7> {
         const result = await this.actor.heir_chunk(arg0, arg1, arg2);
-        return from_candid_Result_6_n20(result);
+        return from_candid_Result_7_n24(result);
     }
-    async heir_lookup(arg0: bigint, arg1: Uint8Array): Promise<Result_7> {
+    async heir_lookup(arg0: bigint, arg1: Uint8Array): Promise<Result_8> {
         const result = await this.actor.heir_lookup(arg0, arg1);
-        return from_candid_Result_7_n25(result);
+        return from_candid_Result_8_n29(result);
     }
-    async heir_open(arg0: bigint, arg1: Uint8Array, arg2: Uint8Array): Promise<Result_8> {
+    async heir_open(arg0: bigint, arg1: Uint8Array, arg2: Uint8Array): Promise<Result_9> {
         const result = await this.actor.heir_open(arg0, arg1, arg2);
-        return from_candid_Result_8_n27(result);
+        return from_candid_Result_9_n31(result);
     }
-    async heritage_public_key(): Promise<Result_6> {
+    async heritage_public_key(): Promise<Result_7> {
         const result = await this.actor.heritage_public_key();
-        return from_candid_Result_6_n20(result);
+        return from_candid_Result_7_n24(result);
     }
     async me(): Promise<AccountView> {
         const result = await this.actor.me();
-        return from_candid_AccountView_n29(result);
+        return from_candid_AccountView_n33(result);
     }
     async my_orders(): Promise<Array<OrderView>> {
         const result = await this.actor.my_orders();
-        return from_candid_vec_n32(result);
+        return from_candid_vec_n35(result);
     }
     async my_switches(): Promise<Array<SwitchView>> {
         const result = await this.actor.my_switches();
         return result;
     }
-    async submit_payment(arg0: bigint, arg1: string): Promise<Result_9> {
+    async submit_payment(arg0: bigint, arg1: string): Promise<Result_10> {
         const result = await this.actor.submit_payment(arg0, arg1);
-        return from_candid_Result_9_n33(result);
+        return from_candid_Result_10_n36(result);
     }
     async switch_commit(arg0: bigint): Promise<Result> {
         const result = await this.actor.switch_commit(arg0);
         return from_candid_Result_n3(result);
     }
-    async switch_create(arg0: SwitchIn): Promise<Result_5> {
+    async switch_create(arg0: SwitchIn): Promise<Result_6> {
         const result = await this.actor.switch_create(arg0);
-        return from_candid_Result_5_n18(result);
+        return from_candid_Result_6_n22(result);
     }
     async switch_delete(arg0: bigint): Promise<Result> {
         const result = await this.actor.switch_delete(arg0);
@@ -421,62 +465,67 @@ export class Ashkey implements ashkeyInterface {
         return from_candid_Result_n3(result);
     }
 }
-function from_candid_AccountView_n29(value: _AccountView): AccountView {
-    return from_candid_record_n30(value);
+function from_candid_AccountView_n33(value: _AccountView): AccountView {
+    return from_candid_record_n34(value);
 }
-function from_candid_Info_n22(value: _Info): Info {
-    return from_candid_record_n23(value);
+function from_candid_Info_n26(value: _Info): Info {
+    return from_candid_record_n27(value);
 }
-function from_candid_OrderView_n14(value: _OrderView): OrderView {
-    return from_candid_record_n15(value);
+function from_candid_OrderView_n18(value: _OrderView): OrderView {
+    return from_candid_record_n19(value);
 }
-function from_candid_PaymentStatus_n35(value: _PaymentStatus): PaymentStatus {
-    return from_candid_variant_n36(value);
+function from_candid_PaymentStatus_n38(value: _PaymentStatus): PaymentStatus {
+    return from_candid_variant_n39(value);
 }
-function from_candid_Product_n16(value: _Product): Product {
-    return from_candid_variant_n17(value);
-}
-function from_candid_Result_1_n6(value: _Result_1): Result_1 {
-    return from_candid_variant_n7(value);
-}
-function from_candid_Result_2_n8(value: _Result_2): Result_2 {
-    return from_candid_variant_n9(value);
-}
-function from_candid_Result_3_n10(value: _Result_3): Result_3 {
-    return from_candid_variant_n11(value);
-}
-function from_candid_Result_4_n12(value: _Result_4): Result_4 {
-    return from_candid_variant_n13(value);
-}
-function from_candid_Result_5_n18(value: _Result_5): Result_5 {
-    return from_candid_variant_n19(value);
-}
-function from_candid_Result_6_n20(value: _Result_6): Result_6 {
+function from_candid_Product_n20(value: _Product): Product {
     return from_candid_variant_n21(value);
 }
-function from_candid_Result_7_n25(value: _Result_7): Result_7 {
-    return from_candid_variant_n26(value);
+function from_candid_Result_10_n36(value: _Result_10): Result_10 {
+    return from_candid_variant_n37(value);
 }
-function from_candid_Result_8_n27(value: _Result_8): Result_8 {
-    return from_candid_variant_n28(value);
+function from_candid_Result_1_n5(value: _Result_1): Result_1 {
+    return from_candid_variant_n6(value);
 }
-function from_candid_Result_9_n33(value: _Result_9): Result_9 {
-    return from_candid_variant_n34(value);
+function from_candid_Result_2_n10(value: _Result_2): Result_2 {
+    return from_candid_variant_n11(value);
+}
+function from_candid_Result_3_n12(value: _Result_3): Result_3 {
+    return from_candid_variant_n13(value);
+}
+function from_candid_Result_4_n14(value: _Result_4): Result_4 {
+    return from_candid_variant_n15(value);
+}
+function from_candid_Result_5_n16(value: _Result_5): Result_5 {
+    return from_candid_variant_n17(value);
+}
+function from_candid_Result_6_n22(value: _Result_6): Result_6 {
+    return from_candid_variant_n23(value);
+}
+function from_candid_Result_7_n24(value: _Result_7): Result_7 {
+    return from_candid_variant_n25(value);
+}
+function from_candid_Result_8_n29(value: _Result_8): Result_8 {
+    return from_candid_variant_n30(value);
+}
+function from_candid_Result_9_n31(value: _Result_9): Result_9 {
+    return from_candid_variant_n32(value);
 }
 function from_candid_Result_n3(value: _Result): Result {
     return from_candid_variant_n4(value);
 }
-function from_candid_opt_n24(value: [] | [Uint8Array]): Uint8Array | null {
+function from_candid_opt_n28(value: [] | [Uint8Array]): Uint8Array | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_opt_n31(value: [] | [bigint]): bigint | null {
+function from_candid_opt_n8(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
-function from_candid_record_n15(value: {
+function from_candid_record_n19(value: {
     id: bigint;
     txs: Array<string>;
     created: bigint;
+    quote_until: [] | [bigint];
     paid: boolean;
+    usd_cents: [] | [bigint];
     address: string;
     amount: bigint;
     received: bigint;
@@ -486,7 +535,9 @@ function from_candid_record_n15(value: {
     id: bigint;
     txs: Array<string>;
     created: bigint;
+    quote_until?: bigint;
     paid: boolean;
+    usd_cents?: bigint;
     address: string;
     amount: bigint;
     received: bigint;
@@ -497,20 +548,26 @@ function from_candid_record_n15(value: {
         id: value.id,
         txs: value.txs,
         created: value.created,
+        quote_until: record_opt_to_undefined(from_candid_opt_n8(value.quote_until)),
         paid: value.paid,
+        usd_cents: record_opt_to_undefined(from_candid_opt_n8(value.usd_cents)),
         address: value.address,
         amount: value.amount,
         received: value.received,
         years: value.years,
-        product: from_candid_Product_n16(value.product)
+        product: from_candid_Product_n20(value.product)
     };
 }
-function from_candid_record_n23(value: {
+function from_candid_record_n27(value: {
+    xmr_usd_cents: [] | [bigint];
     vault_prices: BigUint64Array;
     max_heirs: number;
+    xmr_usd_at: [] | [bigint];
     released_keep_sec: bigint;
+    quote_valid_sec: bigint;
     max_chunk: bigint;
     max_switches: number;
+    usd_heritage_price: bigint;
     heritage_grace_sec: bigint;
     network: string;
     tier_bytes: BigUint64Array;
@@ -523,14 +580,19 @@ function from_candid_record_n23(value: {
     min_confirmations: number;
     vault_grace_sec: bigint;
     paused: boolean;
+    usd_vault_prices: BigUint64Array;
     heritage_max_bytes: bigint;
     heritage_price: bigint;
 }): {
+    xmr_usd_cents?: bigint;
     vault_prices: BigUint64Array;
     max_heirs: number;
+    xmr_usd_at?: bigint;
     released_keep_sec: bigint;
+    quote_valid_sec: bigint;
     max_chunk: bigint;
     max_switches: number;
+    usd_heritage_price: bigint;
     heritage_grace_sec: bigint;
     network: string;
     tier_bytes: BigUint64Array;
@@ -543,15 +605,20 @@ function from_candid_record_n23(value: {
     min_confirmations: number;
     vault_grace_sec: bigint;
     paused: boolean;
+    usd_vault_prices: BigUint64Array;
     heritage_max_bytes: bigint;
     heritage_price: bigint;
 } {
     return {
+        xmr_usd_cents: record_opt_to_undefined(from_candid_opt_n8(value.xmr_usd_cents)),
         vault_prices: value.vault_prices,
         max_heirs: value.max_heirs,
+        xmr_usd_at: record_opt_to_undefined(from_candid_opt_n8(value.xmr_usd_at)),
         released_keep_sec: value.released_keep_sec,
+        quote_valid_sec: value.quote_valid_sec,
         max_chunk: value.max_chunk,
         max_switches: value.max_switches,
+        usd_heritage_price: value.usd_heritage_price,
         heritage_grace_sec: value.heritage_grace_sec,
         network: value.network,
         tier_bytes: value.tier_bytes,
@@ -559,16 +626,17 @@ function from_candid_record_n23(value: {
         payments_ready: value.payments_ready,
         heritage_context: value.heritage_context,
         nodes: value.nodes,
-        heritage_public_key: record_opt_to_undefined(from_candid_opt_n24(value.heritage_public_key)),
+        heritage_public_key: record_opt_to_undefined(from_candid_opt_n28(value.heritage_public_key)),
         key_name: value.key_name,
         min_confirmations: value.min_confirmations,
         vault_grace_sec: value.vault_grace_sec,
         paused: value.paused,
+        usd_vault_prices: value.usd_vault_prices,
         heritage_max_bytes: value.heritage_max_bytes,
         heritage_price: value.heritage_price
     };
 }
-function from_candid_record_n30(value: {
+function from_candid_record_n34(value: {
     now: bigint;
     vault_until: bigint;
     used: bigint;
@@ -601,10 +669,10 @@ function from_candid_record_n30(value: {
         vault_tier: value.vault_tier,
         exists: value.exists,
         heritage_until: value.heritage_until,
-        vault_destroy_at: record_opt_to_undefined(from_candid_opt_n31(value.vault_destroy_at))
+        vault_destroy_at: record_opt_to_undefined(from_candid_opt_n8(value.vault_destroy_at))
     };
 }
-function from_candid_record_n37(value: {
+function from_candid_record_n40(value: {
     order: _OrderView;
     amount: bigint;
 }): {
@@ -612,11 +680,55 @@ function from_candid_record_n37(value: {
     amount: bigint;
 } {
     return {
-        order: from_candid_OrderView_n14(value.order),
+        order: from_candid_OrderView_n18(value.order),
         amount: value.amount
     };
 }
+function from_candid_tuple_n7(value: [[] | [bigint], BigUint64Array]): [bigint | null, BigUint64Array] {
+    return [
+        from_candid_opt_n8(value[0]),
+        value[1]
+    ];
+}
 function from_candid_variant_n11(value: {
+    Ok: string;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: string;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n13(value: {
+    Ok: _Stats;
+} | {
+    Err: string;
+}): {
+    __kind__: "Ok";
+    Ok: Stats;
+} | {
+    __kind__: "Err";
+    Err: string;
+} {
+    return "Ok" in value ? {
+        __kind__: "Ok",
+        Ok: value.Ok
+    } : "Err" in value ? {
+        __kind__: "Err",
+        Err: value.Err
+    } : value;
+}
+function from_candid_variant_n15(value: {
     Ok: number;
 } | {
     Err: string;
@@ -635,7 +747,7 @@ function from_candid_variant_n11(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n13(value: {
+function from_candid_variant_n17(value: {
     Ok: _OrderView;
 } | {
     Err: string;
@@ -648,13 +760,13 @@ function from_candid_variant_n13(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_OrderView_n14(value.Ok)
+        Ok: from_candid_OrderView_n18(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n17(value: {
+function from_candid_variant_n21(value: {
     Vault: number;
 } | {
     Heritage: null;
@@ -673,7 +785,7 @@ function from_candid_variant_n17(value: {
         Heritage: value.Heritage
     } : value;
 }
-function from_candid_variant_n19(value: {
+function from_candid_variant_n23(value: {
     Ok: bigint;
 } | {
     Err: string;
@@ -692,7 +804,7 @@ function from_candid_variant_n19(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n21(value: {
+function from_candid_variant_n25(value: {
     Ok: Uint8Array;
 } | {
     Err: string;
@@ -711,7 +823,7 @@ function from_candid_variant_n21(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n26(value: {
+function from_candid_variant_n30(value: {
     Ok: _HeirView;
 } | {
     Err: string;
@@ -730,7 +842,7 @@ function from_candid_variant_n26(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n28(value: {
+function from_candid_variant_n32(value: {
     Ok: _Opened;
 } | {
     Err: string;
@@ -749,7 +861,7 @@ function from_candid_variant_n28(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n34(value: {
+function from_candid_variant_n37(value: {
     Ok: _PaymentStatus;
 } | {
     Err: string;
@@ -762,13 +874,13 @@ function from_candid_variant_n34(value: {
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: from_candid_PaymentStatus_n35(value.Ok)
+        Ok: from_candid_PaymentStatus_n38(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n36(value: {
+function from_candid_variant_n39(value: {
     NotFound: null;
 } | {
     Waiting: {
@@ -809,7 +921,7 @@ function from_candid_variant_n36(value: {
         Waiting: value.Waiting
     } : "Credited" in value ? {
         __kind__: "Credited",
-        Credited: from_candid_record_n37(value.Credited)
+        Credited: from_candid_record_n40(value.Credited)
     } : "InPool" in value ? {
         __kind__: "InPool",
         InPool: value.InPool
@@ -834,51 +946,32 @@ function from_candid_variant_n4(value: {
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n7(value: {
-    Ok: string;
+function from_candid_variant_n6(value: {
+    Ok: [[] | [bigint], BigUint64Array];
 } | {
     Err: string;
 }): {
     __kind__: "Ok";
-    Ok: string;
+    Ok: [bigint | null, BigUint64Array];
 } | {
     __kind__: "Err";
     Err: string;
 } {
     return "Ok" in value ? {
         __kind__: "Ok",
-        Ok: value.Ok
+        Ok: from_candid_tuple_n7(value.Ok)
     } : "Err" in value ? {
         __kind__: "Err",
         Err: value.Err
     } : value;
 }
-function from_candid_variant_n9(value: {
-    Ok: _Stats;
-} | {
-    Err: string;
-}): {
-    __kind__: "Ok";
-    Ok: Stats;
-} | {
-    __kind__: "Err";
-    Err: string;
-} {
-    return "Ok" in value ? {
-        __kind__: "Ok",
-        Ok: value.Ok
-    } : "Err" in value ? {
-        __kind__: "Err",
-        Err: value.Err
-    } : value;
-}
-function from_candid_vec_n32(value: Array<_OrderView>): Array<OrderView> {
-    return value.map((x)=>from_candid_OrderView_n14(x));
+function from_candid_vec_n35(value: Array<_OrderView>): Array<OrderView> {
+    return value.map((x)=>from_candid_OrderView_n18(x));
 }
 function to_candid_Product_n1(value: Product): _Product {
     return to_candid_variant_n2(value);
 }
-function to_candid_opt_n5(value: bigint | null): [] | [bigint] {
+function to_candid_opt_n9(value: bigint | null): [] | [bigint] {
     return value === null ? candid_none() : candid_some(value);
 }
 function to_candid_variant_n2(value: {

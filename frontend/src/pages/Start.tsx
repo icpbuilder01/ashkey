@@ -50,6 +50,9 @@ export default function Start() {
       <p>No email, no password, no personal details. Pick what you need, then pay in XMR.</p>
 
       {info && !info.payments_ready && <Notice kind="warn">Payments are not open yet. You can look around, but orders will be refused.</Notice>}
+      {info && info.payments_ready && info.vault_prices[0] === 0n && (
+        <Notice kind="warn">The XMR price feed is temporarily unavailable, so new orders are paused. Please try again a bit later.</Notice>
+      )}
       {info?.paused && <Notice kind="warn">New orders are paused for maintenance. Existing accounts are not affected.</Notice>}
 
       <div className="card" style={{ marginBottom: 20 }}>

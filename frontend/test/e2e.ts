@@ -19,8 +19,10 @@ import {
   openJson,
   openSwitchKey,
   packHeritage,
+  openThumb,
   readFileMeta,
   sealJson,
+  sealThumb,
   toB64Url,
   unpackHeritage,
 } from "../src/lib/crypto";
@@ -76,7 +78,12 @@ const me1 = await alice.api.me();
 check("vault active, 1 GB quota", me1.vault_active && me1.quota === 1_000_000_000n);
 check("heritage active", me1.heritage_active);
 const orderTry = await bob.api.create_order({ __kind__: "Vault", Vault: 2 }, 1);
+const rate = sh(`icp canister call ashkey admin_refresh_price '()'`);
+check("price feed: sources agree on a rate", /opt \(?\d/.test(rate.replace(/_/g, "")), rate);
+const info0 = await alice.api.get_info();
+check("dollar prices quoted in XMR", info0.usd_vault_prices[0] === 1500n && info0.vault_prices[0] > 0n && info0.vault_prices[0] % 100_000_000n === 0n);
 check("orders get a subaddress", orderTry.__kind__ === "Ok" && orderTry.Ok.address.length === 95, orderTry);
+check("order keeps the dollar price and a 24 h quote", orderTry.__kind__ === "Ok" && orderTry.Ok.usd_cents === 4900n && orderTry.Ok.quote_until !== undefined && orderTry.Ok.amount === info0.vault_prices[1]);
 
 console.log("== vault");
 const bytes = new Uint8Array(2_500_000);
@@ -101,9 +108,15 @@ check("other account cannot read the chunk", isErr(await bob.api.file_chunk(fid,
 check("other account does not see the file", (await bob.api.file_list()).length === 0);
 const wrongKey = await readFileMeta(bob.keys.vaultKey, list[0].meta).then(() => false, () => true);
 check("another account's key cannot decrypt the name", wrongKey);
+const fakeThumb = crypto.getRandomValues(new Uint8Array(9000));
+ok(await alice.api.file_set_thumb(fid, await sealThumb(back, fakeThumb)));
+check("listing flags the preview", (await alice.api.file_list())[0].has_thumb);
+check("preview decrypts with the file key", same(await openThumb(back, ok(await alice.api.file_thumb(fid))), fakeThumb));
+check("other account cannot read the preview", isErr(await bob.api.file_thumb(fid)));
+check("oversized preview refused", isErr(await alice.api.file_set_thumb(fid, new Uint8Array(60_000)), "invalid thumbnail"));
 check("quota enforced", isErr(await alice.api.file_begin(meta, 2_000_000_000n, 2000), "not enough space"));
 const used = (await alice.api.me()).used;
-check("usage counted", used === BigInt(cipherSize(file.size)), used);
+check("usage counted, preview included", used === BigInt(cipherSize(file.size) + 9000 + 28), used);
 ok(await alice.api.file_delete(fid));
 check("delete frees space", (await alice.api.me()).used === 0n && (await alice.api.file_list()).length === 0);
 

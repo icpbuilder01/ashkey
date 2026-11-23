@@ -1,5 +1,5 @@
 import { Link, XmrLogo } from "../components/ui";
-import { bytes, xmr } from "../lib/format";
+import { bytes, usd, xmr } from "../lib/format";
 import { useSession } from "../lib/session";
 
 const TIERS = [
@@ -10,9 +10,11 @@ const TIERS = [
 
 export default function Home() {
   const { info } = useSession();
-  const prices = info?.vault_prices ?? [30_000_000_000n, 100_000_000_000n, 350_000_000_000n];
+  const prices = info?.vault_prices ?? [0n, 0n, 0n];
+  const dollars = info?.usd_vault_prices ?? [1500n, 4900n, 16900n];
+  const heritageUsd = info?.usd_heritage_price ?? 2500n;
   const sizes = info?.tier_bytes ?? [1_000_000_000n, 5_000_000_000n, 20_000_000_000n];
-  const heritage = info?.heritage_price ?? 50_000_000_000n;
+  const heritage = info?.heritage_price ?? 0n;
   const conf = info?.min_confirmations ?? 10;
 
   return (
@@ -82,7 +84,7 @@ export default function Home() {
           <h2>Vault: encrypted storage</h2>
           <p>
             Drop files in, they are encrypted with a key derived from your account number, then stored on the Internet Computer.
-            Pay per year in XMR. No auto-renewal, no card on file, nothing to cancel.
+            Priced in dollars, paid in XMR, per year. No auto-renewal, no card on file, nothing to cancel.
           </p>
         </div>
         <div className="grid g3">
@@ -94,7 +96,10 @@ export default function Home() {
               </div>
               <div className="size">{bytes(sizes[i])}</div>
               <div className="amt">
-                <XmrLogo size={17} /> {xmr(prices[i])} XMR <small>/ year</small>
+                {usd(dollars[i])} <small>/ year</small>
+              </div>
+              <div className="xmr-eq">
+                <XmrLogo size={15} /> {prices[i] > 0n ? `≈ ${xmr(prices[i])} XMR at today's rate` : "Paid in XMR"}
               </div>
               <ul>
                 <li>{t.note}</li>
@@ -122,7 +127,7 @@ export default function Home() {
             </p>
             <div className="row">
               <span className="amt" style={{ color: "var(--ember2)", fontWeight: 600, fontSize: 18 }}>
-                <XmrLogo size={17} /> {xmr(heritage)} XMR / year
+                <XmrLogo size={17} /> {usd(heritageUsd)} / year{heritage > 0n ? ` · ≈ ${xmr(heritage)} XMR` : ""}
               </span>
               <span className="muted">· up to 10 MB · 5 heirs · 3 switches</span>
             </div>
@@ -279,6 +284,14 @@ export default function Home() {
             everything is deleted. Heritage: your switches keep working and you can still check in, but if you don't renew within{" "}
             {info ? Number(info.heritage_grace_sec) / 86400 : 30} days they release to your heirs rather than being destroyed:
             heirs come first. Released switches are deleted 180 days later.
+          </p>
+        </details>
+        <details>
+          <summary>Why are prices in dollars if I pay in XMR?</summary>
+          <p>
+            So they stay stable for you and sustainable for the service, whatever the market does. At checkout the dollar price
+            is converted at the current XMR rate, agreed by several independent price sources, and that XMR amount is locked for
+            24 hours. You always pay in XMR, and only in XMR.
           </p>
         </details>
         <details>

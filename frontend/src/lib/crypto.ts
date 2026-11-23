@@ -238,3 +238,34 @@ export function checkHeritageKey(keyName: string, context: Uint8Array, canisterI
     throw new Error("The service returned an unexpected encryption key. Nothing was encrypted.");
   }
 }
+
+// ------------------------------------------------------------ image thumbnails
+
+const THUMB_PX = 240;
+
+/** A small WebP preview of an image file, or null if it is not a readable image. */
+export async function makeThumb(file: Blob): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (!file.type.startsWith("image/") || file.type === "image/svg+xml") return null;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, THUMB_PX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0, w, h);
+    bmp.close();
+    const blob = await canvas.convertToBlob({ type: "image/webp", quality: 0.72 });
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    return null;
+  }
+}
+
+/** Thumbnails are encrypted with the file's own key, bound to "nonce:thumb". */
+export function sealThumb(info: FileInfo, bytes: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  return seal(info.key, bytes, concat(info.nonce, enc.encode(":thumb")));
+}
+
+export function openThumb(info: FileInfo, box: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  return unseal(info.key, box, concat(info.nonce, enc.encode(":thumb")));
+}

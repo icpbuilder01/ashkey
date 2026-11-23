@@ -68,6 +68,14 @@ pub struct Config {
     pub heritage_public_key: Option<Vec<u8>>,
     /// Lowered minimum switch interval (tests). `None` = 7 days.
     pub min_interval_sec: Option<u64>,
+    /// Yearly prices in US cents: vault tiers 1..3. `None` = defaults in lib.rs.
+    pub usd_vault_prices: Option<Vec<u64>>,
+    pub usd_heritage_price: Option<u64>,
+    /// Last agreed XMR rate, in US cents per XMR, and when it was set (ns).
+    pub xmr_usd_cents: Option<u64>,
+    pub xmr_usd_at: Option<u64>,
+    /// Raw readings of the last refresh (for transparency).
+    pub xmr_usd_readings: Option<Vec<u64>>,
 }
 candid_storable!(Config);
 
@@ -88,6 +96,11 @@ impl Default for Config {
             next_heritage: 1,
             heritage_public_key: None,
             min_interval_sec: None,
+            usd_vault_prices: None,
+            usd_heritage_price: None,
+            xmr_usd_cents: None,
+            xmr_usd_at: None,
+            xmr_usd_readings: None,
         }
     }
 }
@@ -127,6 +140,10 @@ pub struct Order {
     pub created: u64,
     pub status: OrderStatus,
     pub txs: Vec<String>,
+    /// Price in US cents this order was quoted for (None for early XMR-priced orders).
+    pub usd_cents: Option<u64>,
+    /// The XMR `amount` is guaranteed until then; later it is re-quoted.
+    pub quote_until: Option<u64>,
 }
 candid_storable!(Order);
 
@@ -185,6 +202,7 @@ const MEM_CHUNKS: MemoryId = MemoryId::new(6);
 const MEM_SWITCHES: MemoryId = MemoryId::new(7);
 const MEM_OWNER_SWITCHES: MemoryId = MemoryId::new(8);
 const MEM_SWITCH_CHUNKS: MemoryId = MemoryId::new(9);
+const MEM_THUMBS: MemoryId = MemoryId::new(10);
 
 thread_local! {
     static MM: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -221,6 +239,10 @@ thread_local! {
     /// (owner, switch id) → ()
     pub static OWNER_SWITCHES: RefCell<StableBTreeMap<(Principal, u64), (), Mem>> = RefCell::new(
         StableBTreeMap::init(MM.with(|m| m.borrow().get(MEM_OWNER_SWITCHES))));
+
+    /// (owner, file id) → encrypted image thumbnail (made by the browser)
+    pub static THUMBS: RefCell<StableBTreeMap<(Principal, u64), Vec<u8>, Mem>> = RefCell::new(
+        StableBTreeMap::init(MM.with(|m| m.borrow().get(MEM_THUMBS))));
 
     /// (switch id, chunk index) → encrypted bytes
     pub static SWITCH_CHUNKS: RefCell<StableBTreeMap<(u64, u32), Vec<u8>, Mem>> = RefCell::new(

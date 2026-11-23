@@ -14,7 +14,8 @@ export default function Terms() {
           access to everything on the account.
         </p>
         <p>
-          <b>Payments.</b> Prices are in XMR per year. Payments are final: no refunds, and no account recovery. Send the exact
+          <b>Payments.</b> Prices are set in US dollars per year and paid in XMR: the dollar price is converted at the current
+          rate when you order, and that XMR amount is guaranteed for 24 hours (after that it is recalculated). Payments are final: no refunds, and no account recovery. Send the exact
           amount to the address shown for your order; amounts sent elsewhere cannot be matched to your account.
         </p>
         <p>

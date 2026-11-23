@@ -3,7 +3,7 @@ import type { PaymentStatus } from "../bindings/ashkey/ashkey";
 import { Copy, Link, Notice, QR, Spinner, XmrLogo } from "../components/ui";
 import { useAction, useLoad } from "../lib/hooks";
 import { ok } from "../lib/env";
-import { dateTime, xmr } from "../lib/format";
+import { dateTime, usd, xmr } from "../lib/format";
 import { productName } from "../lib/plans";
 import { useSession } from "../lib/session";
 
@@ -100,6 +100,13 @@ export default function Pay({ id }: { id: bigint }) {
             <span style={{ fontSize: 30, fontWeight: 700, color: "var(--ember2)" }}>{xmr(left)} XMR</span>
             <Copy text={xmr(left)} />
           </div>
+          {order.usd_cents !== undefined && (
+            <p className="muted" style={{ marginTop: -6 }}>
+              {usd(order.usd_cents)} at the rate locked for this order
+              {order.quote_until !== undefined && ` until ${dateTime(order.quote_until)}`}. After that, the amount is recalculated at the
+              current rate when you submit your payment.
+            </p>
+          )}
           {order.received > 0n && <Notice kind="info">Already received {xmr(order.received)} XMR. Send the rest to the same address.</Notice>}
           <div className="muted">to this subaddress (made for this order only)</div>
           <div className="addr" style={{ margin: "6px 0 10px" }}>{order.address}</div>

@@ -11,7 +11,11 @@ import { IDL } from '@icp-sdk/core/candid';
 export const idlFactory = ({ IDL }) => {
   const Product = IDL.Variant({ 'Vault' : IDL.Nat8, 'Heritage' : IDL.Null });
   const Result = IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text });
-  const Result_1 = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
+  const Result_1 = IDL.Variant({
+    'Ok' : IDL.Tuple(IDL.Opt(IDL.Nat64), IDL.Vec(IDL.Nat64)),
+    'Err' : IDL.Text,
+  });
+  const Result_2 = IDL.Variant({ 'Ok' : IDL.Text, 'Err' : IDL.Text });
   const Stats = IDL.Record({
     'files' : IDL.Nat64,
     'switches' : IDL.Nat64,
@@ -22,36 +26,43 @@ export const idlFactory = ({ IDL }) => {
     'paid_orders' : IDL.Nat64,
     'received_pico' : IDL.Nat64,
   });
-  const Result_2 = IDL.Variant({ 'Ok' : Stats, 'Err' : IDL.Text });
-  const Result_3 = IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text });
+  const Result_3 = IDL.Variant({ 'Ok' : Stats, 'Err' : IDL.Text });
+  const Result_4 = IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text });
   const OrderView = IDL.Record({
     'id' : IDL.Nat64,
     'txs' : IDL.Vec(IDL.Text),
     'created' : IDL.Nat64,
+    'quote_until' : IDL.Opt(IDL.Nat64),
     'paid' : IDL.Bool,
+    'usd_cents' : IDL.Opt(IDL.Nat64),
     'address' : IDL.Text,
     'amount' : IDL.Nat64,
     'received' : IDL.Nat64,
     'years' : IDL.Nat8,
     'product' : Product,
   });
-  const Result_4 = IDL.Variant({ 'Ok' : OrderView, 'Err' : IDL.Text });
-  const Result_5 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
-  const Result_6 = IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text });
+  const Result_5 = IDL.Variant({ 'Ok' : OrderView, 'Err' : IDL.Text });
+  const Result_6 = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });
+  const Result_7 = IDL.Variant({ 'Ok' : IDL.Vec(IDL.Nat8), 'Err' : IDL.Text });
   const FileView = IDL.Record({
     'id' : IDL.Nat64,
     'created' : IDL.Nat64,
+    'has_thumb' : IDL.Bool,
     'meta' : IDL.Vec(IDL.Nat8),
     'size' : IDL.Nat64,
     'complete' : IDL.Bool,
     'chunks' : IDL.Nat32,
   });
   const Info = IDL.Record({
+    'xmr_usd_cents' : IDL.Opt(IDL.Nat64),
     'vault_prices' : IDL.Vec(IDL.Nat64),
     'max_heirs' : IDL.Nat32,
+    'xmr_usd_at' : IDL.Opt(IDL.Nat64),
     'released_keep_sec' : IDL.Nat64,
+    'quote_valid_sec' : IDL.Nat64,
     'max_chunk' : IDL.Nat64,
     'max_switches' : IDL.Nat32,
+    'usd_heritage_price' : IDL.Nat64,
     'heritage_grace_sec' : IDL.Nat64,
     'network' : IDL.Text,
     'tier_bytes' : IDL.Vec(IDL.Nat64),
@@ -64,6 +75,7 @@ export const idlFactory = ({ IDL }) => {
     'min_confirmations' : IDL.Nat32,
     'vault_grace_sec' : IDL.Nat64,
     'paused' : IDL.Bool,
+    'usd_vault_prices' : IDL.Vec(IDL.Nat64),
     'heritage_max_bytes' : IDL.Nat64,
     'heritage_price' : IDL.Nat64,
   });
@@ -74,13 +86,13 @@ export const idlFactory = ({ IDL }) => {
     'released' : IDL.Bool,
     'chunks' : IDL.Nat32,
   });
-  const Result_7 = IDL.Variant({ 'Ok' : HeirView, 'Err' : IDL.Text });
+  const Result_8 = IDL.Variant({ 'Ok' : HeirView, 'Err' : IDL.Text });
   const Opened = IDL.Record({
     'encrypted_key' : IDL.Vec(IDL.Nat8),
     'ibe_id' : IDL.Vec(IDL.Nat8),
     'wrapped_key' : IDL.Vec(IDL.Nat8),
   });
-  const Result_8 = IDL.Variant({ 'Ok' : Opened, 'Err' : IDL.Text });
+  const Result_9 = IDL.Variant({ 'Ok' : Opened, 'Err' : IDL.Text });
   const AccountView = IDL.Record({
     'now' : IDL.Nat64,
     'vault_until' : IDL.Nat64,
@@ -113,7 +125,7 @@ export const idlFactory = ({ IDL }) => {
     'Credited' : IDL.Record({ 'order' : OrderView, 'amount' : IDL.Nat64 }),
     'InPool' : IDL.Null,
   });
-  const Result_9 = IDL.Variant({ 'Ok' : PaymentStatus, 'Err' : IDL.Text });
+  const Result_10 = IDL.Variant({ 'Ok' : PaymentStatus, 'Err' : IDL.Text });
   const HeirIn = IDL.Record({
     'claim_hash' : IDL.Vec(IDL.Nat8),
     'wrapped_key' : IDL.Vec(IDL.Nat8),
@@ -129,6 +141,7 @@ export const idlFactory = ({ IDL }) => {
   
   return IDL.Service({
     'admin_grant' : IDL.Func([IDL.Principal, Product, IDL.Nat8], [Result], []),
+    'admin_refresh_price' : IDL.Func([], [Result_1], []),
     'admin_set_min_interval' : IDL.Func([IDL.Opt(IDL.Nat64)], [Result], []),
     'admin_set_nodes' : IDL.Func([IDL.Vec(IDL.Text)], [Result], []),
     'admin_set_params' : IDL.Func(
@@ -136,25 +149,26 @@ export const idlFactory = ({ IDL }) => {
         [Result],
         [],
       ),
-    'admin_set_prices' : IDL.Func(
+    'admin_set_usd_prices' : IDL.Func(
         [IDL.Vec(IDL.Nat64), IDL.Nat64],
         [Result],
         [],
       ),
     'admin_set_wallet' : IDL.Func(
         [IDL.Text, IDL.Text, IDL.Text],
-        [Result_1],
+        [Result_2],
         [],
       ),
-    'admin_stats' : IDL.Func([], [Result_2], ['query']),
-    'check_in' : IDL.Func([], [Result_3], []),
-    'create_order' : IDL.Func([Product, IDL.Nat8], [Result_4], []),
+    'admin_set_xmr_rate' : IDL.Func([IDL.Nat64], [Result], []),
+    'admin_stats' : IDL.Func([], [Result_3], ['query']),
+    'check_in' : IDL.Func([], [Result_4], []),
+    'create_order' : IDL.Func([Product, IDL.Nat8], [Result_5], []),
     'file_begin' : IDL.Func(
         [IDL.Vec(IDL.Nat8), IDL.Nat64, IDL.Nat32],
-        [Result_5],
+        [Result_6],
         [],
       ),
-    'file_chunk' : IDL.Func([IDL.Nat64, IDL.Nat32], [Result_6], ['query']),
+    'file_chunk' : IDL.Func([IDL.Nat64, IDL.Nat32], [Result_7], ['query']),
     'file_commit' : IDL.Func([IDL.Nat64], [Result], []),
     'file_delete' : IDL.Func([IDL.Nat64], [Result], []),
     'file_list' : IDL.Func([], [IDL.Vec(FileView)], ['query']),
@@ -164,29 +178,31 @@ export const idlFactory = ({ IDL }) => {
         [],
       ),
     'file_set_meta' : IDL.Func([IDL.Nat64, IDL.Vec(IDL.Nat8)], [Result], []),
+    'file_set_thumb' : IDL.Func([IDL.Nat64, IDL.Vec(IDL.Nat8)], [Result], []),
+    'file_thumb' : IDL.Func([IDL.Nat64], [Result_7], ['query']),
     'get_info' : IDL.Func([], [Info], ['query']),
     'heir_chunk' : IDL.Func(
         [IDL.Nat64, IDL.Vec(IDL.Nat8), IDL.Nat32],
-        [Result_6],
+        [Result_7],
         ['query'],
       ),
     'heir_lookup' : IDL.Func(
         [IDL.Nat64, IDL.Vec(IDL.Nat8)],
-        [Result_7],
+        [Result_8],
         ['query'],
       ),
     'heir_open' : IDL.Func(
         [IDL.Nat64, IDL.Vec(IDL.Nat8), IDL.Vec(IDL.Nat8)],
-        [Result_8],
+        [Result_9],
         [],
       ),
-    'heritage_public_key' : IDL.Func([], [Result_6], []),
+    'heritage_public_key' : IDL.Func([], [Result_7], []),
     'me' : IDL.Func([], [AccountView], ['query']),
     'my_orders' : IDL.Func([], [IDL.Vec(OrderView)], ['query']),
     'my_switches' : IDL.Func([], [IDL.Vec(SwitchView)], ['query']),
-    'submit_payment' : IDL.Func([IDL.Nat64, IDL.Text], [Result_9], []),
+    'submit_payment' : IDL.Func([IDL.Nat64, IDL.Text], [Result_10], []),
     'switch_commit' : IDL.Func([IDL.Nat64], [Result], []),
-    'switch_create' : IDL.Func([SwitchIn], [Result_5], []),
+    'switch_create' : IDL.Func([SwitchIn], [Result_6], []),
     'switch_delete' : IDL.Func([IDL.Nat64], [Result], []),
     'switch_put' : IDL.Func(
         [IDL.Nat64, IDL.Nat32, IDL.Vec(IDL.Nat8)],
