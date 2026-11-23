@@ -1,4 +1,4 @@
-import { Link } from "../components/ui";
+import { Link, XmrLogo } from "../components/ui";
 import { bytes, xmr } from "../lib/format";
 import { useSession } from "../lib/session";
 
@@ -19,7 +19,9 @@ export default function Home() {
     <div className="wrap">
       <section className="hero">
         <div>
-          <div className="eyebrow">Paid in XMR · No email · No KYC</div>
+          <div className="eyebrow">
+            <XmrLogo size={16} /> Paid in XMR · No email · No KYC
+          </div>
           <h1>
             A vault with <em>no name</em> on it.
           </h1>
@@ -123,7 +125,7 @@ export default function Home() {
               </div>
               <div className="size">{bytes(sizes[i])}</div>
               <div className="amt">
-                {xmr(prices[i])} XMR <small>/ year</small>
+                <XmrLogo size={17} /> {xmr(prices[i])} XMR <small>/ year</small>
               </div>
               <ul>
                 <li>{t.note}</li>
@@ -151,7 +153,7 @@ export default function Home() {
             </p>
             <div className="row">
               <span className="amt" style={{ color: "var(--ember2)", fontWeight: 600, fontSize: 18 }}>
-                {xmr(heritage)} XMR / year
+                <XmrLogo size={17} /> {xmr(heritage)} XMR / year
               </span>
               <span className="muted">· up to 10 MB · 5 heirs · 3 switches</span>
             </div>
@@ -180,7 +182,8 @@ export default function Home() {
 
       <section id="how">
         <div className="section-head">
-          <h2>Paying is a Monero transaction. That's it.</h2>
+          <XmrLogo size={44} />
+          <h2 style={{ marginTop: 14 }}>Paying is a Monero transaction. That's it.</h2>
           <p>No payment processor, no exchange, no middleman holding your money. The canister checks the blockchain itself.</p>
         </div>
         <div className="grid g4">

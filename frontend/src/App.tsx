@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "./components/ui";
+import { Link, XmrLogo } from "./components/ui";
 import { SessionProvider } from "./lib/SessionProvider";
 import { useSession } from "./lib/session";
 import Account from "./pages/Account";
@@ -92,7 +92,15 @@ function Shell() {
       </main>
       <footer className="foot">
         <div className="in">
-          <span>Ashkey · encrypted vault & heritage switch · paid in Monero · runs on the Internet Computer</span>
+          <span>
+            <span className="xmr-badge">
+              <XmrLogo size={16} /> Monero accepted, and only Monero
+            </span>
+            <br />
+            Ashkey · encrypted vault & heritage switch · runs on the Internet Computer
+            <br />
+            <small>Not affiliated with the Monero Project. Monero symbol © The Monero Project, CC BY-SA 4.0.</small>
+          </span>
           <span className="row">
             <Link to="/trust">Verify</Link>
             <Link to="/terms">Terms</Link>

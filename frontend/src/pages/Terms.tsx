@@ -29,6 +29,10 @@ export default function Terms() {
           <b>Changes.</b> The code is open source. While the canisters still have a controller, the service may be updated; the
           trust page shows the live code hash and controllers at any time.
         </p>
+        <p>
+          <b>Trademarks.</b> Ashkey is not affiliated with or endorsed by the Monero Project. The Monero symbol is © The Monero
+          Project, used under CC BY-SA 4.0 to show that XMR is accepted.
+        </p>
       </div>
     </div>
   );

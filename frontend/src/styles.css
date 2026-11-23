@@ -190,3 +190,7 @@ textarea { min-height: 160px; resize: vertical; line-height: 1.5; }
   .file { grid-template-columns: 1fr auto; }
   .file .size { display: none; }
 }
+.xmr-logo { display: inline-block; vertical-align: -0.18em; flex: none; }
+.xmr-badge { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; background: var(--panel); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px 5px 8px; margin-bottom: 10px; }
+.foot small { color: var(--mute); font-size: 12px; }
+section[id] { scroll-margin-top: 80px; }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { PaymentStatus } from "../bindings/ashkey/ashkey";
-import { Copy, Link, Notice, QR, Spinner } from "../components/ui";
+import { Copy, Link, Notice, QR, Spinner, XmrLogo } from "../components/ui";
 import { useAction, useLoad } from "../lib/hooks";
 import { ok } from "../lib/env";
 import { dateTime, xmr } from "../lib/format";
@@ -84,7 +84,9 @@ export default function Pay({ id }: { id: bigint }) {
 
   return (
     <div className="wrap" style={{ maxWidth: 900 }}>
-      <h1 style={{ fontSize: 40 }}>Pay with Monero</h1>
+      <h1 style={{ fontSize: 40 }} className="row">
+        <XmrLogo size={38} /> Pay with Monero
+      </h1>
       <p>
         Order #{order.id.toString()} · {productName(order, info?.tier_bytes)} · {order.years} year{order.years > 1 ? "s" : ""} · created{" "}
         {dateTime(order.created)}

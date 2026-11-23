@@ -54,3 +54,8 @@ export function Spinner() {
   return <span className="spinner" aria-label="Loading" />;
 }
 
+
+/** The Monero symbol (© The Monero Project, CC BY-SA 4.0), used to show XMR is accepted. */
+export function XmrLogo({ size = 18 }: { size?: number }) {
+  return <img src="/monero.png" alt="Monero" width={size} height={size} className="xmr-logo" />;
+}
