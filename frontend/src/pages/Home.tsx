@@ -77,45 +77,6 @@ export default function Home() {
         </figure>
       </section>
 
-      <section>
-        <div className="section-head">
-          <h2>What Ashkey knows about you</h2>
-          <p>Not much. We built it so that a subpoena, a leak or a curious operator gets as little as possible.</p>
-        </div>
-        <div className="card">
-          <table className="cmp">
-            <thead>
-              <tr>
-                <th>About you</th>
-                <th>What the service sees</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Name, email, phone</td>
-                <td className="yes">Nothing. We never ask.</td>
-              </tr>
-              <tr>
-                <td>Your account number</td>
-                <td className="yes">Never received. Only a public key derived from it.</td>
-              </tr>
-              <tr>
-                <td>Your files and their names</td>
-                <td>Encrypted blobs, their sizes and upload times.</td>
-              </tr>
-              <tr>
-                <td>Your Monero wallet</td>
-                <td>That an amount arrived at a one-time subaddress. Not where it came from.</td>
-              </tr>
-              <tr>
-                <td>Your IP address</td>
-                <td>Like any website, the nodes serving the page can see it. Use Tor if that matters to you.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <section id="pricing">
         <div className="section-head">
           <h2>Vault: encrypted storage</h2>
@@ -185,6 +146,45 @@ export default function Home() {
               <p>Past the deadline, each heir opens their link and reads the content. No account, no login, no wallet needed.</p>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="section-head">
+          <h2>What Ashkey knows about you</h2>
+          <p>Not much. We built it so that a subpoena, a leak or a curious operator gets as little as possible.</p>
+        </div>
+        <div className="card">
+          <table className="cmp">
+            <thead>
+              <tr>
+                <th>About you</th>
+                <th>What the service sees</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Name, email, phone</td>
+                <td className="yes">Nothing. We never ask.</td>
+              </tr>
+              <tr>
+                <td>Your account number</td>
+                <td className="yes">Never received. Only a public key derived from it.</td>
+              </tr>
+              <tr>
+                <td>Your files and their names</td>
+                <td>Encrypted blobs, their sizes and upload times.</td>
+              </tr>
+              <tr>
+                <td>Your Monero wallet</td>
+                <td>That an amount arrived at a one-time subaddress. Not where it came from.</td>
+              </tr>
+              <tr>
+                <td>Your IP address</td>
+                <td>Like any website, the nodes serving the page can see it. Use Tor if that matters to you.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
 

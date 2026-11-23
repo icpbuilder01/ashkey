@@ -98,8 +98,7 @@ function Shell() {
             </span>
             <br />
             Ashkey · encrypted vault & heritage switch · runs on the Internet Computer
-            <br />
-            <small>Not affiliated with the Monero Project. Monero symbol © The Monero Project, CC BY-SA 4.0.</small>
+
           </span>
           <span className="row">
             <Link to="/trust">Verify</Link>
