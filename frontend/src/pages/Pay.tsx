@@ -7,7 +7,7 @@ import { dateTime, usd, xmr } from "../lib/format";
 import { productName } from "../lib/plans";
 import { useSession } from "../lib/session";
 
-const RETRY_SEC = 90;
+const RETRY_SEC = 120;
 
 export default function Pay({ id }: { id: bigint }) {
   const { api, account, info, refresh, toast } = useSession();

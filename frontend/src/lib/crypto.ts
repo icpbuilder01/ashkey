@@ -269,3 +269,73 @@ export function sealThumb(info: FileInfo, bytes: Uint8Array): Promise<Uint8Array
 export function openThumb(info: FileInfo, box: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
   return unseal(info.key, box, concat(info.nonce, enc.encode(":thumb")));
 }
+
+// ------------------------------------------------------------ previews for video and text
+
+const TEXT_EXT = /\.(txt|md|markdown|csv|tsv|json|log|xml|ya?ml|toml|ini|conf|cfg|html?|css|js|ts|tsx|jsx|py|rs|go|java|c|h|cpp|sh|sql|env|srt|vtt)$/i;
+
+export type PreviewKind = "image" | "video" | "text";
+
+export function previewKind(type: string, name: string): PreviewKind | null {
+  if (type.startsWith("image/") && type !== "image/svg+xml") return "image";
+  if (type.startsWith("video/")) return "video";
+  if (type.startsWith("text/") || type === "application/json" || type === "application/xml" || TEXT_EXT.test(name)) return "text";
+  return null;
+}
+
+/** A frame from the first seconds of a video, as a WebP thumbnail; null if the browser cannot decode it. */
+export async function makeVideoThumb(file: Blob): Promise<Uint8Array<ArrayBuffer> | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "auto";
+    video.src = url;
+    await new Promise<void>((ok, fail) => {
+      video.onloadeddata = () => ok();
+      video.onerror = () => fail(new Error("cannot decode"));
+      setTimeout(() => fail(new Error("timeout")), 15_000);
+    });
+    const at = Math.min(1, (video.duration || 0) / 10);
+    if (at > 0) {
+      await new Promise<void>((ok) => {
+        video.onseeked = () => ok();
+        video.currentTime = at;
+        setTimeout(ok, 5_000);
+      });
+    }
+    const w0 = video.videoWidth;
+    const h0 = video.videoHeight;
+    if (!w0 || !h0) return null;
+    const scale = Math.min(1, THUMB_PX / Math.max(w0, h0));
+    const canvas = new OffscreenCanvas(Math.round(w0 * scale), Math.round(h0 * scale));
+    canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await canvas.convertToBlob({ type: "image/webp", quality: 0.72 });
+    return new Uint8Array(await blob.arrayBuffer());
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** The first lines of a text file (UTF-8), as the preview. */
+export async function makeTextSnippet(file: Blob): Promise<Uint8Array<ArrayBuffer> | null> {
+  const head = new TextDecoder("utf-8", { fatal: false }).decode(await file.slice(0, 6000).arrayBuffer());
+  const text = head.replace(/\r\n/g, "\n").slice(0, 1200);
+  return text.trim() ? new Uint8Array(enc.encode(text)) : null;
+}
+
+export function makePreview(file: Blob, type: string, name: string): Promise<Uint8Array<ArrayBuffer> | null> {
+  switch (previewKind(type, name)) {
+    case "image":
+      return makeThumb(file);
+    case "video":
+      return makeVideoThumb(file);
+    case "text":
+      return makeTextSnippet(file);
+    default:
+      return Promise.resolve(null);
+  }
+}

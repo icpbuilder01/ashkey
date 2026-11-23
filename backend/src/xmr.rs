@@ -153,7 +153,9 @@ pub async fn verify(cfg: &Config, txid: &str, minor: u32, seed: u64) -> Result<O
         start,
         "/get_transactions",
         &json!({"txs_hashes": [txid], "decode_as_json": false, "prune": false}),
-        512_000,
+        // Typical transactions are 3-15 KB of JSON; 128 KB leaves room for big
+        // ones while keeping each check cheap (outcalls are priced on this).
+        128_000,
         "transform_tx",
     )
     .await?;

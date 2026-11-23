@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FileView } from "../bindings/ashkey/ashkey";
 import { Link, Notice, Progress, Spinner } from "../components/ui";
-import { cipherSize, chunkCount, makeThumb, newFileSecrets, openThumb, readFileMeta, sealThumb, type FileInfo } from "../lib/crypto";
+import { cipherSize, chunkCount, decryptChunk, makePreview, newFileSecrets, openThumb, previewKind, readFileMeta, sealThumb, type FileInfo, type PreviewKind } from "../lib/crypto";
 import { ok } from "../lib/env";
 import { bytes, date, until } from "../lib/format";
 import { useAction, useLoad } from "../lib/hooks";
@@ -13,7 +13,11 @@ interface Row {
   info: FileInfo | null; // null if the name could not be decrypted
 }
 
-const isImage = (r: Row) => !!r.info && r.info.type.startsWith("image/") && r.info.type !== "image/svg+xml";
+const kindOf = (r: Row): PreviewKind | null => (r.info ? previewKind(r.info.type, r.info.name) : null);
+const TEXT_VIEW_MAX = 5_000_000; // larger text files are downloaded instead of shown
+
+type Thumb = { img: string } | { text: string };
+type Viewing = { row: Row; url: string; kind: PreviewKind; text?: string };
 
 export default function Vault() {
   const { account, me, api, refresh, toast } = useSession();
@@ -24,10 +28,10 @@ export default function Vault() {
     for (const f of list) rows.push({ f, info: await readFileMeta(account.vaultKey, f.meta).catch(() => null) });
     return rows.sort((a, b) => Number(b.f.created - a.f.created));
   }, [api, account]);
-  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [thumbs, setThumbs] = useState<Record<string, Thumb>>({});
   const [job, setJob] = useState<{ label: string; value: number } | null>(null);
   const [over, setOver] = useState(false);
-  const [view, setView] = useState<{ row: Row; url: string } | null>(null);
+  const [view, setView] = useState<Viewing | null>(null);
   const [query, setQuery] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const { busy, run } = useAction((m) => toast(m, "err"));
@@ -48,7 +52,8 @@ export default function Vault() {
           todo.slice(i, i + 4).map(async (r) => {
             try {
               const plain = await openThumb(r.info!, ok(await api.file_thumb(r.f.id)));
-              return [r.f.id.toString(), URL.createObjectURL(new Blob([plain], { type: "image/webp" }))] as const;
+              const t: Thumb = kindOf(r) === "text" ? { text: new TextDecoder().decode(plain) } : { img: URL.createObjectURL(new Blob([plain], { type: "image/webp" })) };
+              return [r.f.id.toString(), t] as const;
             } catch {
               return null;
             }
@@ -84,7 +89,7 @@ export default function Vault() {
           setJob({ label: `Encrypting and uploading ${file.name} · ${d}/${t}`, value: d / t })
         );
         ok(await api.file_commit(id));
-        const thumb = await makeThumb(file);
+        const thumb = await makePreview(file, file.type, file.name);
         if (thumb) await api.file_set_thumb(id, await sealThumb(info, thumb)); // a missing preview is not an error
         await refresh();
         reload();
@@ -108,8 +113,12 @@ export default function Vault() {
 
   const open = (r: Row) =>
     run(async () => {
+      const kind = kindOf(r);
+      if (!kind || (kind === "text" && (r.info?.size ?? 0) > TEXT_VIEW_MAX)) return download(r);
       const parts = await fetchFile(r);
-      setView({ row: r, url: URL.createObjectURL(new Blob(parts, { type: r.info!.type })) });
+      const blob = new Blob(parts, { type: r.info!.type || (kind === "text" ? "text/plain" : "") });
+      const text = kind === "text" ? new TextDecoder("utf-8", { fatal: false }).decode(await blob.arrayBuffer()) : undefined;
+      setView({ row: r, url: URL.createObjectURL(blob), kind, text });
     }).finally(() => setJob(null));
 
   const remove = (r: Row) =>
@@ -127,8 +136,11 @@ export default function Vault() {
       let n = 0;
       for (const r of rows) {
         setJob({ label: `Creating previews · ${n + 1}/${rows.length}`, value: n / rows.length });
-        const parts = await fetchFile(r);
-        const thumb = await makeThumb(new Blob(parts, { type: r.info!.type }));
+        const info = r.info!;
+        // Text previews only need the first chunk; images and videos need the whole file.
+        const parts =
+          kindOf(r) === "text" ? [await decryptChunk(info.key, info.nonce, ok(await api.file_chunk(r.f.id, 0)), 0)] : await fetchFile(r);
+        const thumb = await makePreview(new Blob(parts, { type: info.type }), info.type, info.name);
         if (thumb) await api.file_set_thumb(r.f.id, await sealThumb(r.info!, thumb));
         n++;
       }
@@ -138,15 +150,17 @@ export default function Vault() {
 
   const q = query.trim().toLowerCase();
   const shown = (files ?? []).filter((r) => !q || (r.info?.name ?? "").toLowerCase().includes(q));
-  const images = shown.filter((r) => isImage(r) && r.f.complete);
-  const others = shown.filter((r) => !images.includes(r));
-  const missing = images.filter((r) => !r.f.has_thumb);
+  const tiles = shown.filter((r) => kindOf(r) !== null && r.f.complete);
+  const others = shown.filter((r) => !tiles.includes(r));
+  const missing = tiles.filter((r) => !r.f.has_thumb);
   const pct = me.quota > 0n ? Number((me.used * 1000n) / me.quota) / 10 : 0;
 
   return (
     <div className="wrap" style={{ maxWidth: 1040 }}>
       <div className="row between">
-        <h1 style={{ fontSize: 40, margin: 0 }}>Vault</h1>
+        <h1 style={{ fontSize: 40, margin: 0 }}>
+          <span aria-hidden="true">🔐</span> Vault
+        </h1>
         <span className="muted">
           {bytes(me.used)} / {bytes(me.quota)}
         </span>
@@ -182,7 +196,7 @@ export default function Vault() {
         >
           <b>Drop files here</b> or click to choose.
           <br />
-          <span className="muted">Encrypted in this browser before upload. File names and image previews too.</span>
+          <span className="muted">Encrypted in this browser before upload. File names and previews too.</span>
           <input ref={input} type="file" multiple hidden onChange={(e) => e.target.files && upload(e.target.files)} />
         </div>
       )}
@@ -215,13 +229,21 @@ export default function Vault() {
             )}
           </div>
 
-          {images.length > 0 && (
+          {tiles.length > 0 && (
             <div className="gallery">
-              {images.map((r) => {
-                const url = thumbs[r.f.id.toString()];
+              {tiles.map((r) => {
+                const t = thumbs[r.f.id.toString()];
+                const kind = kindOf(r);
                 return (
-                  <button type="button" key={r.f.id.toString()} className="tile" disabled={busy} onClick={() => open(r)} title={r.info?.name}>
-                    {url ? <img src={url} alt={r.info?.name ?? ""} loading="lazy" /> : <span className="tile-ph">{r.f.has_thumb ? <Spinner /> : "🖼"}</span>}
+                  <button type="button" key={r.f.id.toString()} className={`tile tile-${kind}`} disabled={busy} onClick={() => open(r)} title={r.info?.name}>
+                    {t && "img" in t ? (
+                      <img src={t.img} alt={r.info?.name ?? ""} loading="lazy" />
+                    ) : t && "text" in t ? (
+                      <pre className="tile-text">{t.text}</pre>
+                    ) : (
+                      <span className="tile-ph">{r.f.has_thumb ? <Spinner /> : kind === "video" ? "🎬" : kind === "text" ? "📄" : "🖼"}</span>
+                    )}
+                    {kind === "video" && t && "img" in t && <span className="tile-play" aria-hidden="true">▶</span>}
                     <span className="tile-name">{r.info?.name}</span>
                   </button>
                 );
@@ -268,7 +290,13 @@ export default function Vault() {
           aria-label={view.row.info?.name}
           onClick={() => (URL.revokeObjectURL(view.url), setView(null))}
         >
-          <img src={view.url} alt={view.row.info?.name ?? ""} onClick={(e) => e.stopPropagation()} />
+          {view.kind === "image" && <img src={view.url} alt={view.row.info?.name ?? ""} onClick={(e) => e.stopPropagation()} />}
+          {view.kind === "video" && <video src={view.url} controls autoPlay playsInline onClick={(e) => e.stopPropagation()} />}
+          {view.kind === "text" && (
+            <pre className="lightbox-text" onClick={(e) => e.stopPropagation()}>
+              {view.text}
+            </pre>
+          )}
           <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
             <span className="name">
               {view.row.info?.name} <span className="muted">· {bytes(view.row.info?.size ?? 0)} · {date(view.row.f.created)}</span>
