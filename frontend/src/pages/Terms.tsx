@@ -14,6 +14,10 @@ export default function Terms() {
           access to everything on the account.
         </p>
         <p>
+          <b>No KYC.</b> We never ask for your name, email, phone number or any identity document, now or later. An account is
+          just a random number, and the service has nowhere to store personal details.
+        </p>
+        <p>
           <b>Payments.</b> Prices are set in US dollars per year and paid in XMR: the dollar price is converted at the current
           rate when you order, and that XMR amount is guaranteed for 24 hours (after that it is recalculated). Payments are final: no refunds, and no account recovery. Send the exact
           amount to the address shown for your order; amounts sent elsewhere cannot be matched to your account.
