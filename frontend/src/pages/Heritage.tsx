@@ -232,6 +232,10 @@ function NewSwitch({ onDone, usedBytes }: { onDone: () => void; usedBytes: bigin
         Message
         <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="What they should know, where things are, who to call…" />
       </label>
+      <p className="muted" style={{ marginTop: -4 }}>
+        Tip: add your account number to the message and your heirs can also sign in to your vault and download your files. Keep
+        the vault prepaid for longer than your check-in interval.
+      </p>
       <label className="field">
         Attachments (optional)
         <input type="file" multiple onChange={(e) => setFiles(Array.from(e.target.files ?? []))} />

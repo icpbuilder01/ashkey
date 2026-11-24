@@ -288,6 +288,14 @@ export default function Home() {
           </p>
         </details>
         <details>
+          <summary>Can my heirs get my vault too?</summary>
+          <p>
+            Yes. Put your account number in the switch message. Once the switch opens, your heirs sign in with it and download
+            everything in your vault: the account number is the whole key, nothing else is needed. One condition: the vault must
+            still be paid when they sign in, so prepay it for longer than your check-in interval (orders stack, up to 3 years each).
+          </p>
+        </details>
+        <details>
           <summary>Why are prices in dollars if I pay in XMR?</summary>
           <p>
             So they stay stable for you and sustainable for the service, whatever the market does. At checkout the dollar price
