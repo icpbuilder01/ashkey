@@ -5,11 +5,12 @@ import { useAction, useLoad } from "../lib/hooks";
 import { ok } from "../lib/env";
 import { dateTime, usd, xmr } from "../lib/format";
 import { productName } from "../lib/plans";
+import Support from "../components/Support";
 import { useSession } from "../lib/session";
 
 const RETRY_SEC = 120;
 
-export default function Pay({ id }: { id: bigint }) {
+export default function Pay({ reference }: { reference: string }) {
   const { api, account, info, refresh, toast } = useSession();
   const { data: orders, error, reload } = useLoad(() => api.my_orders(), [api]);
   const [txid, setTxid] = useState("");
@@ -19,11 +20,11 @@ export default function Pay({ id }: { id: bigint }) {
   const { busy, run } = useAction((m) => toast(m, "err"));
   const timer = useRef<number | null>(null);
 
-  const order = orders?.find((o) => o.id === id) ?? null;
+  const order = orders?.find((o) => o.reference === reference) ?? null;
 
   const check = () =>
     run(async () => {
-      const s = ok(await api.submit_payment(id, txid.trim()));
+      const s = ok(await api.submit_payment(reference, txid.trim()));
       setStatus(s);
       if (s.__kind__ === "Credited") {
         setAuto(false);
@@ -62,7 +63,7 @@ export default function Pay({ id }: { id: bigint }) {
   if (!order) return <div className="wrap narrow"><Notice kind="err">Order not found on this account.</Notice></div>;
 
   const left = order.amount - order.received;
-  const uri = `monero:${order.address}?tx_amount=${xmr(left)}&tx_description=${encodeURIComponent(`Ashkey order ${order.id}`)}`;
+  const uri = `monero:${order.address}?tx_amount=${xmr(left)}&tx_description=${encodeURIComponent(`Ashkey order ${order.reference}`)}`;
 
   if (order.paid)
     return (
@@ -88,7 +89,7 @@ export default function Pay({ id }: { id: bigint }) {
         <XmrLogo size={38} /> Pay with Monero
       </h1>
       <p>
-        Order #{order.id.toString()} · {productName(order, info?.tier_bytes)} · {order.years} year{order.years > 1 ? "s" : ""} · created{" "}
+        Order {order.reference} · {productName(order, info?.tier_bytes)} · {order.years} year{order.years > 1 ? "s" : ""} · created{" "}
         {dateTime(order.created)}
       </p>
 
@@ -143,6 +144,7 @@ export default function Pay({ id }: { id: bigint }) {
         You can close this page and come back later from your <Link to="/account">account</Link>; the order keeps its address.
         Unpaid orders are removed after 30 days.
       </p>
+      <Support context="payment" />
     </div>
   );
 }

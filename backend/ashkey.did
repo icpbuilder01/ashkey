@@ -63,11 +63,12 @@ type Opened = record {
   wrapped_key : blob;
 };
 type OrderView = record {
-  id : nat64;
   txs : vec text;
   created : nat64;
   quote_until : opt nat64;
   paid : bool;
+  // Public reference like "K7Q2-M9XA" (the internal number is never shown).
+  reference : text;
   usd_cents : opt nat64;
   address : text;
   amount : nat64;
@@ -176,7 +177,7 @@ service : () -> {
   me : () -> (AccountView) query;
   my_orders : () -> (vec OrderView) query;
   my_switches : () -> (vec SwitchView) query;
-  submit_payment : (nat64, text) -> (Result_10);
+  submit_payment : (text, text) -> (Result_10);
   switch_commit : (nat64) -> (Result);
   switch_create : (SwitchIn) -> (Result_6);
   switch_delete : (nat64) -> (Result);

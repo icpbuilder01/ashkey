@@ -76,6 +76,9 @@ pub struct Config {
     pub xmr_usd_at: Option<u64>,
     /// Raw readings of the last refresh (for transparency).
     pub xmr_usd_readings: Option<Vec<u64>>,
+    /// Random secret (from raw_rand) used to derive public order references,
+    /// so customers never see the sequential order number.
+    pub order_salt: Option<Vec<u8>>,
 }
 candid_storable!(Config);
 
@@ -101,6 +104,7 @@ impl Default for Config {
             xmr_usd_cents: None,
             xmr_usd_at: None,
             xmr_usd_readings: None,
+            order_salt: None,
         }
     }
 }

@@ -264,3 +264,18 @@ fn price_transforms_pick_the_last_closed_candle() {
     let v: serde_json::Value = serde_json::from_slice(&price::transform_kraken(args("<html>rate limited")).body).unwrap();
     assert_eq!(v["none"], true);
 }
+
+#[test]
+fn order_references_hide_the_order_number() {
+    update_config(|c| c.order_salt = Some(vec![42; 32]));
+    let a = order_ref(1).unwrap();
+    let b = order_ref(2).unwrap();
+    assert_ne!(a, b);
+    assert_eq!(a.len(), 9);
+    assert_eq!(&a[4..5], "-");
+    assert!(a.chars().all(|c| c == '-' || CROCKFORD.contains(&(c as u8))), "{a}");
+    assert_eq!(normalize_ref(&a.to_lowercase().replace('-', " ")), a);
+    // A different salt gives unrelated references.
+    update_config(|c| c.order_salt = Some(vec![7; 32]));
+    assert_ne!(order_ref(1).unwrap(), a);
+}

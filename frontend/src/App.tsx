@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, XmrLogo } from "./components/ui";
+import { SUPPORT_CHAT, SUPPORT_ISSUES } from "./lib/links";
 import { SessionProvider } from "./lib/SessionProvider";
 import { useSession } from "./lib/session";
 import Account from "./pages/Account";
@@ -42,7 +43,7 @@ function Page({ route }: { route: string }) {
     case "heritage":
       return <Heritage />;
     case "pay":
-      return parts[1] ? <Pay id={BigInt(parts[1])} /> : <Account />;
+      return parts[1] ? <Pay reference={decodeURIComponent(parts[1])} /> : <Account />;
     case "open":
       return parts[1] && parts[2] ? <Open id={BigInt(parts[1])} secret={parts[2]} /> : <Home />;
     case "trust":
@@ -103,6 +104,9 @@ function Shell() {
           <span className="row">
             <Link to="/trust">Verify</Link>
             <Link to="/terms">Terms</Link>
+            <a href={SUPPORT_CHAT ?? SUPPORT_ISSUES} target="_blank" rel="noopener noreferrer">
+              Support
+            </a>
             <a href="https://github.com/icpbuilder01/ashkey" target="_blank" rel="noopener noreferrer">Source</a>
           </span>
         </div>

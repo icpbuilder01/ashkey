@@ -82,7 +82,7 @@ const rate = sh(`icp canister call ashkey admin_refresh_price '()'`);
 check("price feed: sources agree on a rate", /opt \(?\d/.test(rate.replace(/_/g, "")), rate);
 const info0 = await alice.api.get_info();
 check("dollar prices quoted in XMR", info0.usd_vault_prices[0] === 1500n && info0.vault_prices[0] > 0n && info0.vault_prices[0] % 100_000_000n === 0n);
-check("orders get a subaddress", orderTry.__kind__ === "Ok" && orderTry.Ok.address.length === 95, orderTry);
+check("orders get a subaddress", orderTry.__kind__ === "Ok" && orderTry.Ok.address.length === 95 && /^[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/.test(orderTry.Ok.reference), orderTry);
 check("order keeps the dollar price and a 24 h quote", orderTry.__kind__ === "Ok" && orderTry.Ok.usd_cents === 4900n && orderTry.Ok.quote_until !== undefined && orderTry.Ok.amount === info0.vault_prices[1]);
 
 console.log("== vault");

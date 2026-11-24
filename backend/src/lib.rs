@@ -172,7 +172,8 @@ pub struct AccountView {
 
 #[derive(CandidType)]
 pub struct OrderView {
-    id: u64,
+    /// Public reference like "K7Q2-M9XA" (the internal number is never shown).
+    reference: String,
     product: Product,
     years: u8,
     amount: u64,
@@ -188,7 +189,7 @@ pub struct OrderView {
 impl From<Order> for OrderView {
     fn from(o: Order) -> Self {
         OrderView {
-            id: o.id,
+            reference: order_ref(o.id).unwrap_or_default(),
             product: o.product,
             years: o.years,
             amount: o.amount,
@@ -327,6 +328,63 @@ fn switch_view(s: &Switch, owner: &Account, now: u64) -> SwitchView {
         released: now >= d,
         destroy_at: d.saturating_add(RELEASED_KEEP),
         heir_opens: s.heirs.iter().map(|h| h.opens).collect(),
+    }
+}
+
+const CROCKFORD: &[u8] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/// Public reference of an order: 8 Crockford base-32 characters of
+/// SHA-256(secret salt || order id). Unguessable, so it reveals nothing about
+/// how many orders exist.
+fn order_ref(id: u64) -> Option<String> {
+    let salt = config().order_salt?;
+    let mut h = Sha256::new();
+    h.update(&salt);
+    h.update(b"ashkey-order");
+    h.update(id.to_le_bytes());
+    let d = h.finalize();
+    let mut n = u64::from_be_bytes(d[..8].try_into().unwrap());
+    let mut s = String::new();
+    for i in 0..8 {
+        if i == 4 {
+            s.push('-');
+        }
+        s.push(CROCKFORD[(n & 31) as usize] as char);
+        n >>= 5;
+    }
+    Some(s)
+}
+
+fn normalize_ref(r: &str) -> String {
+    let c: String = r.trim().to_uppercase().chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    if c.len() == 8 {
+        format!("{}-{}", &c[..4], &c[4..])
+    } else {
+        c
+    }
+}
+
+/// The caller's order with this public reference.
+fn find_order(p: Principal, reference: &str) -> Option<Order> {
+    let want = normalize_ref(reference);
+    OWNER_ORDERS.with(|o| {
+        o.borrow()
+            .keys_range((p, 0)..=(p, u64::MAX))
+            .find(|(_, id)| order_ref(*id).as_deref() == Some(want.as_str()))
+            .and_then(|(_, id)| ORDERS.with(|m| m.borrow().get(&id)))
+    })
+}
+
+async fn ensure_salt() {
+    if config().order_salt.is_some() {
+        return;
+    }
+    if let Ok(r) = ic_cdk_management_canister::raw_rand().await {
+        update_config(|c| {
+            if c.order_salt.is_none() {
+                c.order_salt = Some(r);
+            }
+        });
     }
 }
 
@@ -487,6 +545,9 @@ fn create_order(product: Product, years: u8) -> R<OrderView> {
     if !(1..=3).contains(&years) {
         return Err("Choose 1 to 3 years.".into());
     }
+    if cfg.order_salt.is_none() {
+        return Err("The service is starting up. Please try again in a few seconds.".into());
+    }
     let usd = product_usd(&cfg, &product)? * years as u64;
     let rate = fresh_rate(&cfg, time()).ok_or("The XMR price feed is temporarily unavailable, so new orders are paused. Please try again later.")?;
     if let (Product::Vault(t), Some(a)) = (&product, account(&p)) {
@@ -555,16 +616,14 @@ fn my_orders() -> Vec<OrderView> {
 }
 
 #[ic_cdk::update]
-async fn submit_payment(order_id: u64, txid: String) -> R<PaymentStatus> {
+async fn submit_payment(reference: String, txid: String) -> R<PaymentStatus> {
     let p = caller()?;
     let txid = txid.trim().to_lowercase();
     if !xmr::valid_txid(&txid) {
         return Err("A transaction ID is 64 hexadecimal characters.".into());
     }
-    let order = ORDERS.with(|m| m.borrow().get(&order_id)).ok_or("Order not found.")?;
-    if order.owner != p {
-        return Err("Order not found.".into());
-    }
+    let order = find_order(p, &reference).ok_or("Order not found.")?;
+    let order_id = order.id;
     if order.status == OrderStatus::Paid {
         return Err("This order is already paid.".into());
     }
@@ -1144,6 +1203,9 @@ fn start_timers() {
     ic_cdk_timers::set_timer_interval(Duration::from_secs(600), || async { maintenance() });
     ic_cdk_timers::set_timer_interval(Duration::from_secs(1800), || async {
         refresh_price().await;
+    });
+    ic_cdk_timers::set_timer(Duration::from_secs(0), async {
+        ensure_salt().await;
     });
     ic_cdk_timers::set_timer(Duration::from_secs(5), async {
         refresh_price().await;

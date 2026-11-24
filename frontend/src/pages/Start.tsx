@@ -34,7 +34,7 @@ export default function Start() {
         a = await signIn(number, stay);
       }
       const o = ok(await a.create_order(productOf(choice), years));
-      navigate(`/pay/${o.id}`);
+      navigate(`/pay/${o.reference}`);
     });
 
   const download = () => {

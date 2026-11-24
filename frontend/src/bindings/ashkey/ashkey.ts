@@ -127,11 +127,14 @@ export interface Opened {
     wrapped_key: Uint8Array;
 }
 export interface OrderView {
-    id: bigint;
     txs: Array<string>;
     created: bigint;
     quote_until?: bigint;
     paid: boolean;
+    /**
+     * Public reference like "K7Q2-M9XA" (the internal number is never shown).
+     */
+    reference: string;
     usd_cents?: bigint;
     address: string;
     amount: bigint;
@@ -318,7 +321,7 @@ export interface ashkeyInterface {
     me(): Promise<AccountView>;
     my_orders(): Promise<Array<OrderView>>;
     my_switches(): Promise<Array<SwitchView>>;
-    submit_payment(arg0: bigint, arg1: string): Promise<Result_10>;
+    submit_payment(arg0: string, arg1: string): Promise<Result_10>;
     switch_commit(arg0: bigint): Promise<Result>;
     switch_create(arg0: SwitchIn): Promise<Result_6>;
     switch_delete(arg0: bigint): Promise<Result>;
@@ -440,7 +443,7 @@ export class Ashkey implements ashkeyInterface {
         const result = await this.actor.my_switches();
         return result;
     }
-    async submit_payment(arg0: bigint, arg1: string): Promise<Result_10> {
+    async submit_payment(arg0: string, arg1: string): Promise<Result_10> {
         const result = await this.actor.submit_payment(arg0, arg1);
         return from_candid_Result_10_n36(result);
     }
@@ -520,11 +523,11 @@ function from_candid_opt_n8(value: [] | [bigint]): bigint | null {
     return value.length === 0 ? null : value[0];
 }
 function from_candid_record_n19(value: {
-    id: bigint;
     txs: Array<string>;
     created: bigint;
     quote_until: [] | [bigint];
     paid: boolean;
+    reference: string;
     usd_cents: [] | [bigint];
     address: string;
     amount: bigint;
@@ -532,11 +535,11 @@ function from_candid_record_n19(value: {
     years: number;
     product: _Product;
 }): {
-    id: bigint;
     txs: Array<string>;
     created: bigint;
     quote_until?: bigint;
     paid: boolean;
+    reference: string;
     usd_cents?: bigint;
     address: string;
     amount: bigint;
@@ -545,11 +548,11 @@ function from_candid_record_n19(value: {
     product: Product;
 } {
     return {
-        id: value.id,
         txs: value.txs,
         created: value.created,
         quote_until: record_opt_to_undefined(from_candid_opt_n8(value.quote_until)),
         paid: value.paid,
+        reference: value.reference,
         usd_cents: record_opt_to_undefined(from_candid_opt_n8(value.usd_cents)),
         address: value.address,
         amount: value.amount,

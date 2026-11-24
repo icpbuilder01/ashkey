@@ -29,11 +29,11 @@ export const idlFactory = ({ IDL }) => {
   const Result_3 = IDL.Variant({ 'Ok' : Stats, 'Err' : IDL.Text });
   const Result_4 = IDL.Variant({ 'Ok' : IDL.Nat32, 'Err' : IDL.Text });
   const OrderView = IDL.Record({
-    'id' : IDL.Nat64,
     'txs' : IDL.Vec(IDL.Text),
     'created' : IDL.Nat64,
     'quote_until' : IDL.Opt(IDL.Nat64),
     'paid' : IDL.Bool,
+    'reference' : IDL.Text,
     'usd_cents' : IDL.Opt(IDL.Nat64),
     'address' : IDL.Text,
     'amount' : IDL.Nat64,
@@ -200,7 +200,7 @@ export const idlFactory = ({ IDL }) => {
     'me' : IDL.Func([], [AccountView], ['query']),
     'my_orders' : IDL.Func([], [IDL.Vec(OrderView)], ['query']),
     'my_switches' : IDL.Func([], [IDL.Vec(SwitchView)], ['query']),
-    'submit_payment' : IDL.Func([IDL.Nat64, IDL.Text], [Result_10], []),
+    'submit_payment' : IDL.Func([IDL.Text, IDL.Text], [Result_10], []),
     'switch_commit' : IDL.Func([IDL.Nat64], [Result], []),
     'switch_create' : IDL.Func([SwitchIn], [Result_6], []),
     'switch_delete' : IDL.Func([IDL.Nat64], [Result], []),

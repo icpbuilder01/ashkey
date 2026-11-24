@@ -30,7 +30,7 @@ export default function Account() {
   const buy = () =>
     run(async () => {
       const o = ok(await api.create_order(productOf(choice), years));
-      navigate(`/pay/${o.id}`);
+      navigate(`/pay/${o.reference}`);
     });
 
   return (
@@ -60,8 +60,8 @@ export default function Account() {
         <Notice kind="warn">
           Unpaid order{pending.length > 1 ? "s" : ""}:{" "}
           {pending.map((o) => (
-            <Link key={o.id.toString()} to={`/pay/${o.id}`}>
-              #{o.id.toString()} {productName(o, info?.tier_bytes)} ({xmr(o.amount - o.received)} XMR){" "}
+            <Link key={o.reference} to={`/pay/${o.reference}`}>
+              {o.reference} {productName(o, info?.tier_bytes)} ({xmr(o.amount - o.received)} XMR){" "}
             </Link>
           ))}
         </Notice>

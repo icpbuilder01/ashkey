@@ -86,11 +86,14 @@ export interface Opened {
   'wrapped_key' : Uint8Array,
 }
 export interface OrderView {
-  'id' : bigint,
   'txs' : Array<string>,
   'created' : bigint,
   'quote_until' : [] | [bigint],
   'paid' : boolean,
+  /**
+   * Public reference like "K7Q2-M9XA" (the internal number is never shown).
+   */
+  'reference' : string,
   'usd_cents' : [] | [bigint],
   'address' : string,
   'amount' : bigint,
@@ -244,7 +247,7 @@ export interface _SERVICE {
   'me' : ActorMethod<[], AccountView>,
   'my_orders' : ActorMethod<[], Array<OrderView>>,
   'my_switches' : ActorMethod<[], Array<SwitchView>>,
-  'submit_payment' : ActorMethod<[bigint, string], Result_10>,
+  'submit_payment' : ActorMethod<[string, string], Result_10>,
   'switch_commit' : ActorMethod<[bigint], Result>,
   'switch_create' : ActorMethod<[SwitchIn], Result_6>,
   'switch_delete' : ActorMethod<[bigint], Result>,

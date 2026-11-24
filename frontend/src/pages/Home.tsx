@@ -1,5 +1,6 @@
 import { Link, XmrLogo } from "../components/ui";
 import { bytes, usd, xmr } from "../lib/format";
+import { SUPPORT_CHAT, SUPPORT_ISSUES } from "../lib/links";
 import { useSession } from "../lib/session";
 
 const TIERS = [
@@ -307,6 +308,27 @@ export default function Home() {
             The canisters keep running as long as they have cycles (the Internet Computer's gas). The plan is to make the service
             autonomous and give up control once the code has proven itself. Until then, keep your own copies of what matters: no
             single place should hold the only one.
+          </p>
+        </details>
+        <details>
+          <summary>How do I get help?</summary>
+          <p>
+            {SUPPORT_CHAT ? (
+              <>
+                Ask on{" "}
+                <a href={SUPPORT_CHAT} target="_blank" rel="noopener noreferrer">
+                  OpenChat
+                </a>{" "}
+                or open a{" "}
+              </>
+            ) : (
+              "Open a "
+            )}
+            <a href={SUPPORT_ISSUES} target="_blank" rel="noopener noreferrer">
+              GitHub issue
+            </a>
+            . For a payment, give your order reference and the transaction ID. Never share your account number: nobody from Ashkey
+            will ever ask for it.
           </p>
         </details>
         <details>
