@@ -161,13 +161,18 @@ service : () -> {
   file_chunk : (nat64, nat32) -> (Result_7) query;
   file_commit : (nat64) -> (Result);
   file_delete : (nat64) -> (Result);
-  file_list : () -> (vec FileView) query;
+  // One page of the caller's files, in id order, starting after `after`.
+  // Fewer than FILE_PAGE results means it was the last page.
+  file_list : (opt nat64) -> (vec FileView) query;
   file_put : (nat64, nat32, blob) -> (Result);
   file_set_meta : (nat64, blob) -> (Result);
   // Stores (or replaces) the encrypted thumbnail of an image.
   file_set_thumb : (nat64, blob) -> (Result);
   file_thumb : (nat64) -> (Result_7) query;
   get_info : () -> (Info) query;
+  // One order, read through consensus (an update call), so a single malicious
+  // replica cannot show a different payment address. The pay page uses this.
+  get_order : (text) -> (Result_5);
   heir_chunk : (nat64, blob, nat32) -> (Result_7) query;
   heir_lookup : (nat64, blob) -> (Result_8) query;
   heir_open : (nat64, blob, blob) -> (Result_9);

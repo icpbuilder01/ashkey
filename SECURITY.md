@@ -73,3 +73,28 @@ on the canister.
 - **The configured Monero nodes**, mitigated by the two-node agreement and the txid hash check.
 
 No external audit has been done yet.
+
+## Abuse limits
+
+Identities are free (anyone can generate account numbers), so every expensive
+operation has a global cap, not only a per-identity one:
+
+- **Payment checks** (HTTPS outcalls, a few billion cycles each): 20 s between
+  checks per account, at most 30 per order, at most 400 per day for the whole
+  service. A check for an unknown transaction stops after the first node.
+- **Cycle reserve:** below 1T cycles the canister makes no outcalls at all
+  (payment checks and price refresh pause). A draining attack can delay
+  payments, never freeze the vaults.
+- **Orders:** at most 20 per minute and 500 per day. Unpaid orders are deleted
+  after 7 days and their subaddress index is reused, so spam cannot push the
+  index beyond the operator wallet's lookahead.
+- **Payment integrity:** the order (and its payment address) is read through an
+  update call, so a single replica cannot substitute an address. Each one-time
+  output key is credited once (Monero "burning bug").
+- **Website:** a Content-Security-Policy restricts scripts to the site itself.
+
+## Review log
+
+- 2026-11-24, internal review: fixed a cycle-drain vector through payment
+  checks, an uncertified payment address on the pay page, an unpaginated file
+  list, unbounded subaddress growth from order spam, duplicate output keys; added a CSP.

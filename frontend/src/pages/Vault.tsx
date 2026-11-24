@@ -23,7 +23,14 @@ export default function Vault() {
   const { account, me, api, refresh, toast } = useSession();
   const { data: files, error, reload } = useLoad(async () => {
     if (!account) return [];
-    const list = await api.file_list();
+    // The canister returns files page by page (400 at a time).
+    const list: FileView[] = [];
+    for (let after: bigint | null = null; ; ) {
+      const page = await api.file_list(after);
+      list.push(...page);
+      if (page.length < 400) break;
+      after = page[page.length - 1].id;
+    }
     const rows: Row[] = [];
     for (const f of list) rows.push({ f, info: await readFileMeta(account.vaultKey, f.meta).catch(() => null) });
     return rows.sort((a, b) => Number(b.f.created - a.f.created));

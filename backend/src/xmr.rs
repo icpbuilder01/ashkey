@@ -63,16 +63,19 @@ pub enum Outcome {
     InPool,
     /// Mined at `height`, not enough confirmations yet.
     Waiting { height: u64 },
-    /// Confirmed; `amount` (piconero) went to the order's subaddress.
-    Received { amount: u64, height: u64 },
+    /// Confirmed; `outputs` are the (one-time key, piconero) pairs sent to the order's subaddress.
+    Received { outputs: Vec<([u8; 32], u64)>, height: u64 },
 }
 
 pub fn valid_txid(txid: &str) -> bool {
     txid.len() == 64 && txid.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
 }
 
-/// Decodes a transaction blob and returns the amount sent to subaddress (0, minor).
-pub fn amount_to_subaddress(cfg: &Config, txid: &str, hex_blob: &str, minor: u32) -> Result<u64, String> {
+/// Decodes a transaction blob and returns the outputs sent to subaddress (0, minor),
+/// as (one-time public key, piconero). Amounts are only trusted after the
+/// monero crate re-derives the Pedersen commitment from the decrypted amount
+/// and finds it equal to the one in the transaction (a forged amount fails).
+pub fn outputs_to_subaddress(cfg: &Config, txid: &str, hex_blob: &str, minor: u32) -> Result<Vec<([u8; 32], u64)>, String> {
     let bytes = hex::decode(hex_blob).map_err(|_| "The node returned an invalid transaction.")?;
     let tx: Transaction = deserialize(&bytes).map_err(|_| "Could not decode the transaction.")?;
     if format!("{:x}", tx.hash()) != txid {
@@ -84,14 +87,29 @@ pub fn amount_to_subaddress(cfg: &Config, txid: &str, hex_blob: &str, minor: u32
     let vp = view_pair(cfg)?;
     let checker = SubKeyChecker::new(&vp, 0..1, minor..minor + 1);
     let owned = tx.check_outputs_with(&checker).map_err(|_| "Could not read the transaction outputs.")?;
-    let mut total: u64 = 0;
+    let mut found: Vec<([u8; 32], u64)> = vec![];
     for out in owned {
         if out.sub_index() == (Index { major: 0, minor }) {
             let a = out.amount().ok_or("Could not decrypt an output amount.")?;
-            total = total.saturating_add(a.as_pico());
+            let key = out.out().target.as_one_time_key().ok_or("Unexpected output type.")?;
+            found.push((key.to_bytes(), a.as_pico()));
         }
     }
-    Ok(total)
+    Ok(found)
+}
+
+/// Sum of the outputs, counting each one-time key once (the "burning bug":
+/// two outputs with the same key can only be spent once).
+pub fn total_unique(outputs: &[([u8; 32], u64)]) -> u64 {
+    let mut seen: Vec<[u8; 32]> = vec![];
+    let mut total = 0u64;
+    for (k, a) in outputs {
+        if !seen.contains(k) {
+            seen.push(*k);
+            total = total.saturating_add(*a);
+        }
+    }
+    total
 }
 
 async fn post(base: &str, path: &str, body: Value, max_bytes: u64, transform: &str) -> Result<Value, String> {
@@ -120,7 +138,9 @@ async fn post(base: &str, path: &str, body: Value, max_bytes: u64, transform: &s
 }
 
 /// Asks nodes until two of them answered; both answers must be identical.
-async fn two_agreeing(cfg: &Config, start: usize, path: &str, body: &Value, max: u64, transform: &str) -> Result<Value, String> {
+/// If the first answer satisfies `enough`, it is returned on its own (used for
+/// "transaction not found", which credits nothing, to halve the cost).
+async fn two_agreeing(cfg: &Config, start: usize, path: &str, body: &Value, max: u64, transform: &str, enough: fn(&Value) -> bool) -> Result<Value, String> {
     let n = cfg.nodes.len();
     if n < 2 {
         return Err("Payments need at least two Monero nodes configured.".into());
@@ -130,6 +150,9 @@ async fn two_agreeing(cfg: &Config, start: usize, path: &str, body: &Value, max:
         let node = &cfg.nodes[(start + i) % n];
         if let Ok(v) = post(node, path, body.clone(), max, transform).await {
             if v.get("error").is_none() {
+                if answers.is_empty() && enough(&v) {
+                    return Ok(v);
+                }
                 answers.push(v);
             }
         }
@@ -157,6 +180,7 @@ pub async fn verify(cfg: &Config, txid: &str, minor: u32, seed: u64) -> Result<O
         // ones while keeping each check cheap (outcalls are priced on this).
         128_000,
         "transform_tx",
+        |v| v.get("missing").is_some(),
     )
     .await?;
     if tx.get("missing").is_some() {
@@ -167,7 +191,7 @@ pub async fn verify(cfg: &Config, txid: &str, minor: u32, seed: u64) -> Result<O
     }
     let height = tx["height"].as_u64().ok_or("bad height")?;
     let hex_blob = tx["hex"].as_str().ok_or("bad tx")?;
-    let amount = amount_to_subaddress(cfg, txid, hex_blob, minor)?;
+    let outputs = outputs_to_subaddress(cfg, txid, hex_blob, minor)?;
 
     let target = height + cfg.min_confirmations.max(1) as u64 - 1;
     let head = two_agreeing(
@@ -177,10 +201,11 @@ pub async fn verify(cfg: &Config, txid: &str, minor: u32, seed: u64) -> Result<O
         &json!({"jsonrpc": "2.0", "id": "0", "method": "get_block_header_by_height", "params": {"height": target}}),
         16_000,
         "transform_header",
+        |_| false,
     )
     .await;
     match head {
-        Ok(v) if v.get("hash").is_some() => Ok(Outcome::Received { amount, height }),
+        Ok(v) if v.get("hash").is_some() => Ok(Outcome::Received { outputs, height }),
         _ => Ok(Outcome::Waiting { height }),
     }
 }

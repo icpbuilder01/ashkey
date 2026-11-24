@@ -171,7 +171,11 @@ export const idlFactory = ({ IDL }) => {
     'file_chunk' : IDL.Func([IDL.Nat64, IDL.Nat32], [Result_7], ['query']),
     'file_commit' : IDL.Func([IDL.Nat64], [Result], []),
     'file_delete' : IDL.Func([IDL.Nat64], [Result], []),
-    'file_list' : IDL.Func([], [IDL.Vec(FileView)], ['query']),
+    'file_list' : IDL.Func(
+        [IDL.Opt(IDL.Nat64)],
+        [IDL.Vec(FileView)],
+        ['query'],
+      ),
     'file_put' : IDL.Func(
         [IDL.Nat64, IDL.Nat32, IDL.Vec(IDL.Nat8)],
         [Result],
@@ -181,6 +185,7 @@ export const idlFactory = ({ IDL }) => {
     'file_set_thumb' : IDL.Func([IDL.Nat64, IDL.Vec(IDL.Nat8)], [Result], []),
     'file_thumb' : IDL.Func([IDL.Nat64], [Result_7], ['query']),
     'get_info' : IDL.Func([], [Info], ['query']),
+    'get_order' : IDL.Func([IDL.Text], [Result_5], []),
     'heir_chunk' : IDL.Func(
         [IDL.Nat64, IDL.Vec(IDL.Nat8), IDL.Nat32],
         [Result_7],

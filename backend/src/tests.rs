@@ -42,15 +42,15 @@ fn txid_format() {
 fn real_mainnet_tx_parses_and_hashes() {
     // A real Bulletproofs+ transaction from mainnet block 3812936.
     let cfg = test_cfg();
-    let got = xmr::amount_to_subaddress(&cfg, REAL_TXID, REAL_TX_HEX.trim(), 7);
-    assert_eq!(got, Ok(0), "not ours, so nothing is credited");
+    let got = xmr::outputs_to_subaddress(&cfg, REAL_TXID, REAL_TX_HEX.trim(), 7);
+    assert_eq!(got, Ok(vec![]), "not ours, so nothing is credited");
 }
 
 #[test]
 fn substituted_tx_is_rejected() {
     let cfg = test_cfg();
     let other = "00".repeat(32);
-    let err = xmr::amount_to_subaddress(&cfg, &other, REAL_TX_HEX.trim(), 7).unwrap_err();
+    let err = xmr::outputs_to_subaddress(&cfg, &other, REAL_TX_HEX.trim(), 7).unwrap_err();
     assert!(err.contains("does not match"), "{err}");
 }
 
@@ -278,4 +278,42 @@ fn order_references_hide_the_order_number() {
     // A different salt gives unrelated references.
     update_config(|c| c.order_salt = Some(vec![7; 32]));
     assert_ne!(order_ref(1).unwrap(), a);
+}
+
+#[test]
+fn reused_output_keys_count_once() {
+    let k1 = [1u8; 32];
+    let k2 = [2u8; 32];
+    assert_eq!(xmr::total_unique(&[(k1, 10), (k2, 5)]), 15);
+    assert_eq!(xmr::total_unique(&[(k1, 10), (k1, 10)]), 10, "burning bug: same key twice counts once");
+}
+
+#[test]
+fn expired_unpaid_orders_free_their_number() {
+    let now = 58 * YEAR;
+    let owner = Principal::from_slice(&[9; 29]);
+    let mk = |id: u64, created: u64, received: u64| Order {
+        id,
+        owner,
+        product: Product::Vault(1),
+        years: 1,
+        amount: 100,
+        received,
+        address: String::new(),
+        created,
+        status: OrderStatus::Pending,
+        txs: vec![],
+        usd_cents: Some(1500),
+        quote_until: None,
+        checks: None,
+    };
+    for (id, created, received) in [(700, now - 8 * DAY, 0), (701, now - DAY, 0), (702, now - 9 * DAY, 50)] {
+        ORDERS.with(|m| m.borrow_mut().insert(id, mk(id, created, received)));
+        OWNER_ORDERS.with(|m| m.borrow_mut().insert((owner, id), ()));
+    }
+    maintenance_at(now, || false);
+    assert!(ORDERS.with(|m| m.borrow().get(&700).is_none()), "old and unpaid: removed");
+    assert!(FREE_IDS.with(|f| f.borrow().contains_key(&700)), "its number is reusable");
+    assert!(ORDERS.with(|m| m.borrow().get(&701).is_some()), "recent: kept");
+    assert!(ORDERS.with(|m| m.borrow().get(&702).is_some()), "partly paid: kept");
 }

@@ -66,7 +66,19 @@ const MAX_META: usize = 4_096;
 const MAX_THUMB: usize = 48_000;
 const MAX_FILES_PER_ACCOUNT: usize = 20_000;
 const INCOMPLETE_TTL: u64 = DAY;
-const UNPAID_ORDER_TTL: u64 = 30 * DAY;
+/// Unpaid orders (nothing received) are deleted after this; their subaddress index is reused.
+const UNPAID_ORDER_TTL: u64 = 7 * DAY;
+/// Anti-abuse: identities are free, so the expensive things have global caps.
+const ORDERS_PER_MINUTE: u32 = 20;
+const ORDERS_PER_DAY: u32 = 500;
+/// Payment checks cost a few billion cycles each (HTTPS outcalls).
+const CHECKS_PER_ORDER: u32 = 30;
+const CHECKS_PER_DAY: u32 = 400;
+/// Below this balance, no outcalls at all: the cycles are kept for storage,
+/// so a cycle-draining attack can delay payments but never freeze the vaults.
+const CYCLE_RESERVE: u128 = 1_000_000_000_000;
+/// Files returned per file_list page (metadata ≤ 4 KB each, well under the reply limit).
+const FILE_PAGE: usize = 400;
 const MAX_PENDING_ORDERS: usize = 5;
 const HERITAGE_CONTEXT: &[u8] = b"ashkey-heritage-v1";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -83,6 +95,10 @@ thread_local! {
     static LAST_CALL: RefCell<HashMap<(Principal, &'static str), u64>> = RefCell::new(HashMap::new());
     /// Orders created in the current minute (global spam brake).
     static ORDER_BUCKET: RefCell<(u64, u32)> = const { RefCell::new((0, 0)) };
+    /// Orders created today (global brake).
+    static ORDER_DAY: RefCell<(u64, u32)> = const { RefCell::new((0, 0)) };
+    /// Payment checks today (global cycle budget).
+    static CHECK_DAY: RefCell<(u64, u32)> = const { RefCell::new((0, 0)) };
 }
 
 fn throttle(p: Principal, method: &'static str, gap: u64) -> R<()> {
@@ -100,6 +116,26 @@ fn throttle(p: Principal, method: &'static str, gap: u64) -> R<()> {
         l.insert((p, method), now);
         Ok(())
     })
+}
+
+/// Counts one event in a (period, count) bucket; refuses past `max`.
+fn bucket(b: &'static std::thread::LocalKey<RefCell<(u64, u32)>>, period: u64, max: u32, msg: &str) -> R<()> {
+    let now = time() / period;
+    b.with(|b| {
+        let mut b = b.borrow_mut();
+        if b.0 != now {
+            *b = (now, 0);
+        }
+        if b.1 >= max {
+            return Err(msg.to_string());
+        }
+        b.1 += 1;
+        Ok(())
+    })
+}
+
+fn enough_cycles() -> bool {
+    canister_cycle_balance() >= CYCLE_RESERVE
 }
 
 fn caller() -> R<Principal> {
@@ -566,24 +602,21 @@ fn create_order(product: Product, years: u8) -> R<OrderView> {
     }
     throttle(p, "create_order", 3 * SEC)?;
     let now = time();
-    ORDER_BUCKET.with(|b| {
-        let mut b = b.borrow_mut();
-        let minute = now / (60 * SEC);
-        if b.0 != minute {
-            *b = (minute, 0);
-        }
-        if b.1 >= 120 {
-            return Err("Too many new orders right now. Try again in a minute.".to_string());
-        }
-        b.1 += 1;
-        Ok(())
-    })?;
-    let id = cfg.next_order;
+    bucket(&ORDER_BUCKET, 60 * SEC, ORDERS_PER_MINUTE, "Too many new orders right now. Try again in a minute.")?;
+    bucket(&ORDER_DAY, DAY, ORDERS_PER_DAY, "Too many new orders today. Please try again tomorrow.")?;
+    // Reuse the number of an expired unpaid order if there is one.
+    let reused = FREE_IDS.with(|f| f.borrow().keys().next());
+    let id = reused.unwrap_or(cfg.next_order);
     if id > u32::MAX as u64 {
         return Err("Order space exhausted.".into());
     }
     let address = xmr::subaddress(&cfg, id as u32)?;
-    update_config(|c| c.next_order += 1);
+    match reused {
+        Some(r) => {
+            FREE_IDS.with(|f| f.borrow_mut().remove(&r));
+        }
+        None => update_config(|c| c.next_order += 1),
+    }
     let order = Order {
         id,
         owner: p,
@@ -597,6 +630,7 @@ fn create_order(product: Product, years: u8) -> R<OrderView> {
         txs: vec![],
         usd_cents: Some(usd),
         quote_until: Some(now + price::QUOTE_NS),
+        checks: Some(0),
     };
     ORDERS.with(|m| m.borrow_mut().insert(id, order.clone()));
     OWNER_ORDERS.with(|m| m.borrow_mut().insert((p, id), ()));
@@ -615,6 +649,14 @@ fn my_orders() -> Vec<OrderView> {
     })
 }
 
+/// One order, read through consensus (an update call), so a single malicious
+/// replica cannot show a different payment address. The pay page uses this.
+#[ic_cdk::update]
+fn get_order(reference: String) -> R<OrderView> {
+    let p = caller()?;
+    find_order(p, &reference).map(OrderView::from).ok_or_else(|| "Order not found.".into())
+}
+
 #[ic_cdk::update]
 async fn submit_payment(reference: String, txid: String) -> R<PaymentStatus> {
     let p = caller()?;
@@ -630,16 +672,33 @@ async fn submit_payment(reference: String, txid: String) -> R<PaymentStatus> {
     if USED_TX.with(|u| u.borrow().contains_key(&txid)) {
         return Err("This transaction was already used for a payment.".into());
     }
+    if order.checks.unwrap_or(0) >= CHECKS_PER_ORDER {
+        return Err("This order has been checked many times. Please contact support with your order reference and transaction ID.".into());
+    }
+    if !enough_cycles() {
+        return Err("Payment checks are paused for maintenance. Your payment is safe; please try again later.".into());
+    }
     throttle(p, "submit_payment", 20 * SEC)?;
+    bucket(&CHECK_DAY, DAY, CHECKS_PER_DAY, "Payment checks are busy today. Your payment is safe; please try again in a few hours.")?;
+    // Count the check before the paid outcalls.
+    let mut counted = order.clone();
+    counted.checks = Some(counted.checks.unwrap_or(0) + 1);
+    ORDERS.with(|m| m.borrow_mut().insert(order_id, counted));
     let cfg = config();
     let outcome = xmr::verify(&cfg, &txid, order_id as u32, time() / SEC).await?;
     match outcome {
         xmr::Outcome::NotFound => Ok(PaymentStatus::NotFound),
         xmr::Outcome::InPool => Ok(PaymentStatus::InPool),
         xmr::Outcome::Waiting { height } => Ok(PaymentStatus::Waiting { height, needed: cfg.min_confirmations }),
-        xmr::Outcome::Received { amount, .. } => {
-            if amount == 0 {
+        xmr::Outcome::Received { outputs, .. } => {
+            if outputs.is_empty() {
                 return Err("This transaction sent nothing to this order's address.".into());
+            }
+            // Outputs whose one-time key was already credited count for nothing.
+            let fresh: Vec<([u8; 32], u64)> = outputs.into_iter().filter(|(k, _)| !OUTPUT_KEYS.with(|o| o.borrow().contains_key(k))).collect();
+            let amount = xmr::total_unique(&fresh);
+            if amount == 0 {
+                return Err("These outputs were already credited.".into());
             }
             // State may have changed during the outcalls: check again.
             if USED_TX.with(|u| u.borrow().contains_key(&txid)) {
@@ -661,6 +720,12 @@ async fn submit_payment(reference: String, txid: String) -> R<PaymentStatus> {
                 }
             }
             USED_TX.with(|u| u.borrow_mut().insert(txid.clone(), order_id));
+            OUTPUT_KEYS.with(|o| {
+                let mut o = o.borrow_mut();
+                for (k, _) in &fresh {
+                    o.insert(*k, order_id);
+                }
+            });
             o.received = o.received.saturating_add(amount);
             o.txs.push(txid);
             if o.received >= o.amount {
@@ -763,12 +828,16 @@ fn file_set_meta(id: u64, meta: Vec<u8>) -> R<()> {
     Ok(())
 }
 
+/// One page of the caller's files, in id order, starting after `after`.
+/// Fewer than FILE_PAGE results means it was the last page.
 #[ic_cdk::query]
-fn file_list() -> Vec<FileView> {
+fn file_list(after: Option<u64>) -> Vec<FileView> {
     let p = msg_caller();
+    let start = after.map_or(0, |a| a.saturating_add(1));
     FILES.with(|f| {
         f.borrow()
-            .range((p, 0)..=(p, u64::MAX))
+            .range((p, start)..=(p, u64::MAX))
+            .take(FILE_PAGE)
             .map(|e| {
                 let (k, v) = e.into_pair();
                 let has_thumb = THUMBS.with(|t| t.borrow().contains_key(&k));
@@ -1183,10 +1252,14 @@ fn maintenance_at(now: u64, over: impl Fn() -> bool) {
     for (id, owner) in old {
         ORDERS.with(|m| m.borrow_mut().remove(&id));
         OWNER_ORDERS.with(|m| m.borrow_mut().remove(&(owner, id)));
+        FREE_IDS.with(|f| f.borrow_mut().insert(id, ()));
     }
 }
 
 async fn refresh_price() -> (Option<u64>, Vec<u64>) {
+    if !enough_cycles() {
+        return (None, vec![]);
+    }
     let (agreed, readings) = price::fetch(time() / SEC).await;
     let now = time();
     update_config(|c| {

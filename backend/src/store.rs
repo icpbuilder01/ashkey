@@ -148,6 +148,8 @@ pub struct Order {
     pub usd_cents: Option<u64>,
     /// The XMR `amount` is guaranteed until then; later it is re-quoted.
     pub quote_until: Option<u64>,
+    /// How many payment checks (paid outcalls) this order has used.
+    pub checks: Option<u32>,
 }
 candid_storable!(Order);
 
@@ -207,6 +209,8 @@ const MEM_SWITCHES: MemoryId = MemoryId::new(7);
 const MEM_OWNER_SWITCHES: MemoryId = MemoryId::new(8);
 const MEM_SWITCH_CHUNKS: MemoryId = MemoryId::new(9);
 const MEM_THUMBS: MemoryId = MemoryId::new(10);
+const MEM_FREE_IDS: MemoryId = MemoryId::new(11);
+const MEM_OUTPUT_KEYS: MemoryId = MemoryId::new(12);
 
 thread_local! {
     static MM: RefCell<MemoryManager<DefaultMemoryImpl>> =
@@ -247,6 +251,15 @@ thread_local! {
     /// (owner, file id) → encrypted image thumbnail (made by the browser)
     pub static THUMBS: RefCell<StableBTreeMap<(Principal, u64), Vec<u8>, Mem>> = RefCell::new(
         StableBTreeMap::init(MM.with(|m| m.borrow().get(MEM_THUMBS))));
+
+    /// Order numbers (= subaddress indexes) of unpaid orders that expired,
+    /// reused for new orders so spam cannot push the index ever higher.
+    pub static FREE_IDS: RefCell<StableBTreeMap<u64, (), Mem>> = RefCell::new(
+        StableBTreeMap::init(MM.with(|m| m.borrow().get(MEM_FREE_IDS))));
+
+    /// One-time output keys already credited → order. Each key counts once.
+    pub static OUTPUT_KEYS: RefCell<StableBTreeMap<[u8; 32], u64, Mem>> = RefCell::new(
+        StableBTreeMap::init(MM.with(|m| m.borrow().get(MEM_OUTPUT_KEYS))));
 
     /// (switch id, chunk index) → encrypted bytes
     pub static SWITCH_CHUNKS: RefCell<StableBTreeMap<(u64, u32), Vec<u8>, Mem>> = RefCell::new(

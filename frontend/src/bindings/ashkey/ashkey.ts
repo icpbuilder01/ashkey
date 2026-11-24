@@ -308,12 +308,13 @@ export interface ashkeyInterface {
     file_chunk(arg0: bigint, arg1: number): Promise<Result_7>;
     file_commit(arg0: bigint): Promise<Result>;
     file_delete(arg0: bigint): Promise<Result>;
-    file_list(): Promise<Array<FileView>>;
+    file_list(arg0: bigint | null): Promise<Array<FileView>>;
     file_put(arg0: bigint, arg1: number, arg2: Uint8Array): Promise<Result>;
     file_set_meta(arg0: bigint, arg1: Uint8Array): Promise<Result>;
     file_set_thumb(arg0: bigint, arg1: Uint8Array): Promise<Result>;
     file_thumb(arg0: bigint): Promise<Result_7>;
     get_info(): Promise<Info>;
+    get_order(arg0: string): Promise<Result_5>;
     heir_chunk(arg0: bigint, arg1: Uint8Array, arg2: number): Promise<Result_7>;
     heir_lookup(arg0: bigint, arg1: Uint8Array): Promise<Result_8>;
     heir_open(arg0: bigint, arg1: Uint8Array, arg2: Uint8Array): Promise<Result_9>;
@@ -391,8 +392,8 @@ export class Ashkey implements ashkeyInterface {
         const result = await this.actor.file_delete(arg0);
         return from_candid_Result_n3(result);
     }
-    async file_list(): Promise<Array<FileView>> {
-        const result = await this.actor.file_list();
+    async file_list(arg0: bigint | null): Promise<Array<FileView>> {
+        const result = await this.actor.file_list(to_candid_opt_n9(arg0));
         return result;
     }
     async file_put(arg0: bigint, arg1: number, arg2: Uint8Array): Promise<Result> {
@@ -414,6 +415,10 @@ export class Ashkey implements ashkeyInterface {
     async get_info(): Promise<Info> {
         const result = await this.actor.get_info();
         return from_candid_Info_n26(result);
+    }
+    async get_order(arg0: string): Promise<Result_5> {
+        const result = await this.actor.get_order(arg0);
+        return from_candid_Result_5_n16(result);
     }
     async heir_chunk(arg0: bigint, arg1: Uint8Array, arg2: number): Promise<Result_7> {
         const result = await this.actor.heir_chunk(arg0, arg1, arg2);

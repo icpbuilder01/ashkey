@@ -12,7 +12,9 @@ const RETRY_SEC = 120;
 
 export default function Pay({ reference }: { reference: string }) {
   const { api, account, info, refresh, toast } = useSession();
-  const { data: orders, error, reload } = useLoad(() => api.my_orders(), [api]);
+  // Read through consensus (update call): the payment address must not come
+  // from a single replica's answer.
+  const { data: order, error, reload } = useLoad(async () => (account ? ok(await api.get_order(reference)) : null), [api, account, reference]);
   const [txid, setTxid] = useState("");
   const [status, setStatus] = useState<PaymentStatus | null>(null);
   const [auto, setAuto] = useState(false);
@@ -20,7 +22,6 @@ export default function Pay({ reference }: { reference: string }) {
   const { busy, run } = useAction((m) => toast(m, "err"));
   const timer = useRef<number | null>(null);
 
-  const order = orders?.find((o) => o.reference === reference) ?? null;
 
   const check = () =>
     run(async () => {
@@ -59,8 +60,7 @@ export default function Pay({ reference }: { reference: string }) {
       </div>
     );
   if (error) return <div className="wrap narrow"><Notice kind="err">{error}</Notice></div>;
-  if (!orders) return <div className="wrap narrow"><Spinner /></div>;
-  if (!order) return <div className="wrap narrow"><Notice kind="err">Order not found on this account.</Notice></div>;
+  if (!order) return <div className="wrap narrow"><Spinner /></div>;
 
   const left = order.amount - order.received;
   const uri = `monero:${order.address}?tx_amount=${xmr(left)}&tx_description=${encodeURIComponent(`Ashkey order ${order.reference}`)}`;
@@ -142,7 +142,7 @@ export default function Pay({ reference }: { reference: string }) {
       </div>
       <p className="muted" style={{ marginTop: 16 }}>
         You can close this page and come back later from your <Link to="/account">account</Link>; the order keeps its address.
-        Unpaid orders are removed after 30 days.
+        Unpaid orders are removed after 7 days.
       </p>
       <Support context="payment" />
     </div>

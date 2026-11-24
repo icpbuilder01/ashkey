@@ -227,7 +227,11 @@ export interface _SERVICE {
   'file_chunk' : ActorMethod<[bigint, number], Result_7>,
   'file_commit' : ActorMethod<[bigint], Result>,
   'file_delete' : ActorMethod<[bigint], Result>,
-  'file_list' : ActorMethod<[], Array<FileView>>,
+  /**
+   * One page of the caller's files, in id order, starting after `after`.
+   * Fewer than FILE_PAGE results means it was the last page.
+   */
+  'file_list' : ActorMethod<[[] | [bigint]], Array<FileView>>,
   'file_put' : ActorMethod<[bigint, number, Uint8Array], Result>,
   'file_set_meta' : ActorMethod<[bigint, Uint8Array], Result>,
   /**
@@ -236,6 +240,11 @@ export interface _SERVICE {
   'file_set_thumb' : ActorMethod<[bigint, Uint8Array], Result>,
   'file_thumb' : ActorMethod<[bigint], Result_7>,
   'get_info' : ActorMethod<[], Info>,
+  /**
+   * One order, read through consensus (an update call), so a single malicious
+   * replica cannot show a different payment address. The pay page uses this.
+   */
+  'get_order' : ActorMethod<[string], Result_5>,
   'heir_chunk' : ActorMethod<[bigint, Uint8Array, number], Result_7>,
   'heir_lookup' : ActorMethod<[bigint, Uint8Array], Result_8>,
   'heir_open' : ActorMethod<[bigint, Uint8Array, Uint8Array], Result_9>,
