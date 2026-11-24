@@ -1,4 +1,5 @@
-import { CanisterStatus, HttpAgent } from "@icp-sdk/core/agent";
+import { Actor, CanisterStatus, HttpAgent } from "@icp-sdk/core/agent";
+import { IDL } from "@icp-sdk/core/candid";
 import { Principal } from "@icp-sdk/core/principal";
 import { Copy, Notice, Spinner } from "../components/ui";
 import { useLoad } from "../lib/hooks";
@@ -13,11 +14,52 @@ function hex(b: unknown): string {
   return String(b ?? "—");
 }
 
+/** Public, immutable canister that only reports the status of canisters listing it as a controller. */
+const BLACKHOLE = "e3mmv-5qaaa-aaaah-aadma-cai";
+const blackholeIdl: IDL.InterfaceFactory = ({ IDL }) =>
+  IDL.Service({
+    canister_status: IDL.Func(
+      [IDL.Record({ canister_id: IDL.Principal })],
+      [IDL.Record({ cycles: IDL.Nat, memory_size: IDL.Nat })],
+      []
+    ),
+  });
+/** Below this, the canister should be topped up. */
+const LOW_CYCLES = 500_000_000_000n;
+
 async function status(id: string) {
   const agent = await HttpAgent.create({ host: isLocal ? location.origin : "https://icp-api.io", rootKey, shouldFetchRootKey: false });
   const r = await CanisterStatus.request({ canisterId: Principal.fromText(id), agent, paths: ["module_hash", "controllers"] });
   const controllers = (r.get("controllers") as Principal[] | undefined)?.map((p) => p.toText()) ?? [];
-  return { hash: hex(r.get("module_hash")), controllers };
+  let cycles: bigint | null = null;
+  if (!isLocal && controllers.includes(BLACKHOLE)) {
+    const bh = Actor.createActor<{ canister_status: (a: { canister_id: Principal }) => Promise<{ cycles: bigint }> }>(blackholeIdl, {
+      agent,
+      canisterId: BLACKHOLE,
+    });
+    cycles = await bh.canister_status({ canister_id: Principal.fromText(id) }).then(
+      (s) => s.cycles,
+      () => null
+    );
+  }
+  return { hash: hex(r.get("module_hash")), controllers, cycles };
+}
+
+function Controllers({ list }: { list: string[] }) {
+  const real = list.filter((c) => c !== BLACKHOLE);
+  if (!real.length) return <>none (blackholed)</>;
+  return (
+    <>
+      {real.join(", ")}
+      {list.includes(BLACKHOLE) && <span className="muted"> + {BLACKHOLE} (public read-only status reader)</span>}
+    </>
+  );
+}
+
+function Cycles({ value }: { value: bigint | null }) {
+  if (value === null) return <span className="muted">not published</span>;
+  const t = (Number(value) / 1e12).toFixed(2);
+  return value < LOW_CYCLES ? <span style={{ color: "var(--err)" }}>{t} T cycles (low)</span> : <>{t} T cycles</>;
 }
 
 export default function Trust() {
@@ -42,11 +84,15 @@ export default function Trust() {
           <dt>Backend module hash</dt>
           <dd className="mono">{back ? back.hash : <Spinner />}</dd>
           <dt>Backend controllers</dt>
-          <dd className="mono">{back ? back.controllers.join(", ") || "none (blackholed)" : <Spinner />}</dd>
+          <dd className="mono">{back ? <Controllers list={back.controllers} /> : <Spinner />}</dd>
+          <dt>Backend cycles</dt>
+          <dd>{back ? <Cycles value={back.cycles} /> : <Spinner />}</dd>
           <dt>Website</dt>
           <dd className="mono">{frontendId}</dd>
           <dt>Website controllers</dt>
-          <dd className="mono">{front ? front.controllers.join(", ") || "none (blackholed)" : <Spinner />}</dd>
+          <dd className="mono">{front ? <Controllers list={front.controllers} /> : <Spinner />}</dd>
+          <dt>Website cycles</dt>
+          <dd>{front ? <Cycles value={front.cycles} /> : <Spinner />}</dd>
           <dt>Version</dt>
           <dd>{info?.version ?? "…"}</dd>
           <dt>Monero nodes used</dt>
