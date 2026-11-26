@@ -193,6 +193,12 @@ export interface _SERVICE {
    */
   'admin_grant' : ActorMethod<[Principal, Product, number], Result>,
   /**
+   * Pauses new orders for `hours` (0 lifts the pause). Existing accounts, payment
+   * checks, check-ins and switches are never affected. The operator can pause at
+   * most 48 h, once every 7 days.
+   */
+  'admin_pause_orders' : ActorMethod<[number], Result>,
+  /**
    * Reads the price sources now. Returns the agreed rate (if any) and the raw readings.
    */
   'admin_refresh_price' : ActorMethod<[], Result_1>,
@@ -201,6 +207,11 @@ export interface _SERVICE {
    */
   'admin_set_min_interval' : ActorMethod<[[] | [bigint]], Result>,
   'admin_set_nodes' : ActorMethod<[Array<string>], Result>,
+  /**
+   * Sets or removes the operator. The current operator can hand over or give up
+   * the role, so it keeps working after the controllers are removed.
+   */
+  'admin_set_operator' : ActorMethod<[[] | [Principal]], Result>,
   'admin_set_params' : ActorMethod<[number, string, boolean], Result>,
   /**
    * Yearly prices in US cents (vault tiers 1..3, heritage). Paid plans are not affected.

@@ -141,9 +141,11 @@ export const idlFactory = ({ IDL }) => {
   
   return IDL.Service({
     'admin_grant' : IDL.Func([IDL.Principal, Product, IDL.Nat8], [Result], []),
+    'admin_pause_orders' : IDL.Func([IDL.Nat32], [Result], []),
     'admin_refresh_price' : IDL.Func([], [Result_1], []),
     'admin_set_min_interval' : IDL.Func([IDL.Opt(IDL.Nat64)], [Result], []),
     'admin_set_nodes' : IDL.Func([IDL.Vec(IDL.Text)], [Result], []),
+    'admin_set_operator' : IDL.Func([IDL.Opt(IDL.Principal)], [Result], []),
     'admin_set_params' : IDL.Func(
         [IDL.Nat32, IDL.Text, IDL.Bool],
         [Result],
