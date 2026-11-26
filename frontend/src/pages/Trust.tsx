@@ -24,8 +24,13 @@ const blackholeIdl: IDL.InterfaceFactory = ({ IDL }) =>
       []
     ),
   });
-/** Below this, the canister should be topped up. */
-const LOW_CYCLES = 500_000_000_000n;
+/**
+ * Reference burn in cycles/day, measured on mainnet 2026-11 (idle storage + price refreshes + payment checks).
+ * It grows with stored data, so the estimate is refreshed when these are re-measured.
+ */
+const BURN_PER_DAY = { backend: 30e9, frontend: 3.6e9 };
+/** A canister freezes before it empties: it keeps freezing-threshold (30 days) of idle burn in reserve. */
+const RESERVE = { backend: 30 * 3.1e9, frontend: 30 * 3.6e9 };
 
 async function status(id: string) {
   const agent = await HttpAgent.create({ host: isLocal ? location.origin : "https://icp-api.io", rootKey, shouldFetchRootKey: false });
@@ -56,10 +61,18 @@ function Controllers({ list }: { list: string[] }) {
   );
 }
 
-function Cycles({ value }: { value: bigint | null }) {
+function runway(days: number): string {
+  if (days < 60) return `about ${Math.floor(days)} days`;
+  if (days < 730) return `about ${Math.round(days / 30.4)} months`;
+  return `about ${(days / 365).toFixed(1)} years`;
+}
+
+function Cycles({ value, which }: { value: bigint | null; which: keyof typeof BURN_PER_DAY }) {
   if (value === null) return <span className="muted">not published</span>;
   const t = (Number(value) / 1e12).toFixed(2);
-  return value < LOW_CYCLES ? <span style={{ color: "var(--err)" }}>{t} T cycles (low)</span> : <>{t} T cycles</>;
+  const days = Math.max(0, (Number(value) - RESERVE[which]) / BURN_PER_DAY[which]);
+  const text = `${t} T cycles · ${runway(days)} left at current usage`;
+  return days < 30 ? <span style={{ color: "var(--err)" }}>{text} (needs a top-up)</span> : <>{text}</>;
 }
 
 export default function Trust() {
@@ -86,13 +99,13 @@ export default function Trust() {
           <dt>Backend controllers</dt>
           <dd className="mono">{back ? <Controllers list={back.controllers} /> : <Spinner />}</dd>
           <dt>Backend cycles</dt>
-          <dd>{back ? <Cycles value={back.cycles} /> : <Spinner />}</dd>
+          <dd>{back ? <Cycles value={back.cycles} which="backend" /> : <Spinner />}</dd>
           <dt>Website</dt>
           <dd className="mono">{frontendId}</dd>
           <dt>Website controllers</dt>
           <dd className="mono">{front ? <Controllers list={front.controllers} /> : <Spinner />}</dd>
           <dt>Website cycles</dt>
-          <dd>{front ? <Cycles value={front.cycles} /> : <Spinner />}</dd>
+          <dd>{front ? <Cycles value={front.cycles} which="frontend" /> : <Spinner />}</dd>
           <dt>Version</dt>
           <dd>{info?.version ?? "…"}</dd>
           <dt>Monero nodes used</dt>
