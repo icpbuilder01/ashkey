@@ -138,11 +138,18 @@ service : () -> {
   // Gives a plan without payment (support cases, tests). It can only add time
   // to an account; it cannot read or move anything.
   admin_grant : (principal, Product, nat8) -> (Result);
+  // Pauses new orders for `hours` (0 lifts the pause). Existing accounts, payment
+  // checks, check-ins and switches are never affected. The operator can pause at
+  // most 48 h, once every 7 days.
+  admin_pause_orders : (nat32) -> (Result);
   // Reads the price sources now. Returns the agreed rate (if any) and the raw readings.
   admin_refresh_price : () -> (Result_1);
   // Lowers the minimum switch interval (tests only; never below 60 s). `None` restores 7 days.
   admin_set_min_interval : (opt nat64) -> (Result);
   admin_set_nodes : (vec text) -> (Result);
+  // Sets or removes the operator. The current operator can hand over or give up
+  // the role, so it keeps working after the controllers are removed.
+  admin_set_operator : (opt principal) -> (Result);
   admin_set_params : (nat32, text, bool) -> (Result);
   // Yearly prices in US cents (vault tiers 1..3, heritage). Paid plans are not affected.
   admin_set_usd_prices : (vec nat64, nat64) -> (Result);

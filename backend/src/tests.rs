@@ -317,3 +317,25 @@ fn expired_unpaid_orders_free_their_number() {
     assert!(ORDERS.with(|m| m.borrow().get(&701).is_some()), "recent: kept");
     assert!(ORDERS.with(|m| m.borrow().get(&702).is_some()), "partly paid: kept");
 }
+
+#[test]
+fn node_operators_group_subdomains() {
+    assert_eq!(xmr::node_operator("https://chad.fiatfaucet.com"), "fiatfaucet.com");
+    assert_eq!(xmr::node_operator("https://kowalski.fiatfaucet.com:443/"), "fiatfaucet.com");
+    assert_eq!(xmr::node_operator("https://node.hinto.rs"), "hinto.rs");
+    assert_eq!(xmr::node_operator("https://xmr.carlslab.de"), "carlslab.de");
+    assert_eq!(xmr::node_operator("https://node.example.co.uk:18089"), "example.co.uk");
+    assert_eq!(xmr::node_operator("https://example.org"), "example.org");
+    assert_ne!(xmr::node_operator("https://a.one.net"), xmr::node_operator("https://b.two.net"));
+}
+
+#[test]
+fn operator_pause_is_temporary() {
+    let mut cfg = Config::default();
+    assert!(!orders_paused(&cfg, 1_000));
+    cfg.paused_until = Some(2_000);
+    assert!(orders_paused(&cfg, 1_000));
+    assert!(!orders_paused(&cfg, 2_001));
+    cfg.paused = true;
+    assert!(orders_paused(&cfg, 5_000));
+}

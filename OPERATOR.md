@@ -29,16 +29,19 @@ icp canister call ashkey admin_set_params '(10 : nat32, "key_1", false)' -e ic
 icp canister call ashkey heritage_public_key '()' -e ic    # caches the vetKD key
 ```
 
-At least two independent HTTPS nodes are required; three or more lets checks continue when
-one is down. Public HTTPS nodes: https://xmr.ditatompel.com/remote-nodes/ (filter https).
+At least three HTTPS nodes from at least two different domains are required. A payment is
+only accepted when two nodes **run by different domains** return the same answer
+(`chad.example.com` and `kowalski.example.com` count as one operator). Keep about ten nodes
+from different operators so checks continue when some disappear. Public HTTPS nodes:
+https://monero.fail (filter https), https://xmr.ditatompel.com/remote-nodes/.
 
 ## 3. Prices
 
 ```sh
-icp canister call ashkey admin_set_prices '(vec { 30_000_000_000; 100_000_000_000; 350_000_000_000 }, 50_000_000_000)' -e ic
+icp canister call ashkey admin_set_usd_prices '(vec { 1_500 : nat64; 4_900; 16_900 }, 2_500 : nat64)' -e ic
 ```
 
-Piconero per year (1 XMR = 10^12). Changing prices does not affect plans already paid.
+US cents per year. Changing prices does not affect plans already paid.
 
 ## 4. Support and stats
 
@@ -47,7 +50,29 @@ icp canister call ashkey admin_stats '()' -e ic
 icp canister call ashkey admin_grant '(principal "<account principal>", variant { Vault = 1 : nat8 }, 1 : nat8)' -e ic
 ```
 
-## 5. Cycles
+## 5. Operator role (works after blackholing)
+
+The controllers can name an **operator** principal. It keeps the service running without
+being a controller, so it still works once every controller is removed:
+
+```sh
+icp canister call ashkey admin_set_operator '(opt principal "<operator principal>")' -e ic
+```
+
+| The operator can | Limits |
+|---|---|
+| replace the Monero nodes (`admin_set_nodes`) | 3+ nodes, 2+ domains |
+| change the USD prices (`admin_set_usd_prices`) | at most 3x the launch prices |
+| set the XMR rate by hand (`admin_set_xmr_rate`) | only while the price feeds are down |
+| pause new orders (`admin_pause_orders`) | 48 h at most, once every 7 days |
+| change the service wallet, give free plans, read stats | |
+| hand the role to another principal or give it up (`admin_set_operator`) | |
+
+The operator can **never** read vaults, release or delay switches, change the vetKD key,
+the confirmation count or the switch rules (`admin_set_params`, `admin_set_min_interval`
+stay controller-only), and it cannot change the code.
+
+## 6. Cycles
 
 Storage is the main cost: about 4T cycles per GB per year on a 13-node subnet (≈ 5 € /GB/yr).
 A heir opening a switch costs one vetKD derivation (~26B cycles). Each payment check costs a

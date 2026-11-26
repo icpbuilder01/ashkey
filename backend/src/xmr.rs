@@ -137,6 +137,21 @@ async fn post(base: &str, path: &str, body: Value, max_bytes: u64, transform: &s
     serde_json::from_slice(&res.body).map_err(|_| "unreadable node reply".to_string())
 }
 
+/// Who runs a node, approximated by its registrable domain: "a.b.example.com"
+/// and "c.example.com" are the same operator ("example.com"). Handles the usual
+/// two-level suffixes like "co.uk".
+pub fn node_operator(url: &str) -> String {
+    let host = url.trim().trim_start_matches("https://").split(['/', ':', '?']).next().unwrap_or("").to_ascii_lowercase();
+    let labels: Vec<&str> = host.split('.').filter(|l| !l.is_empty()).collect();
+    let n = labels.len();
+    if n <= 2 {
+        return labels.join(".");
+    }
+    let two_level = labels[n - 1].len() == 2 && ["co", "com", "net", "org", "ac", "gov", "edu"].contains(&labels[n - 2]);
+    let keep = if two_level { 3 } else { 2 };
+    labels[n - keep..].join(".")
+}
+
 /// Asks nodes until two of them answered; both answers must be identical.
 /// If the first answer satisfies `enough`, it is returned on its own (used for
 /// "transaction not found", which credits nothing, to halve the cost).
@@ -146,12 +161,22 @@ async fn two_agreeing(cfg: &Config, start: usize, path: &str, body: &Value, max:
         return Err("Payments need at least two Monero nodes configured.".into());
     }
     let mut answers: Vec<Value> = vec![];
+    // The two agreeing answers must come from different operators (domains):
+    // two nodes of the same operator could agree on a fake transaction.
+    let mut first_operator: Option<String> = None;
     for i in 0..n {
         let node = &cfg.nodes[(start + i) % n];
+        let op = node_operator(node);
+        if first_operator.as_deref() == Some(op.as_str()) {
+            continue;
+        }
         if let Ok(v) = post(node, path, body.clone(), max, transform).await {
             if v.get("error").is_none() {
                 if answers.is_empty() && enough(&v) {
                     return Ok(v);
+                }
+                if answers.is_empty() {
+                    first_operator = Some(op);
                 }
                 answers.push(v);
             }

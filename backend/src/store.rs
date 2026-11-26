@@ -79,6 +79,14 @@ pub struct Config {
     /// Random secret (from raw_rand) used to derive public order references,
     /// so customers never see the sequential order number.
     pub order_salt: Option<Vec<u8>>,
+    /// Operator: keeps the service running (nodes, prices, wallet, short pauses,
+    /// free grants) without being a controller, so it survives blackholing.
+    /// It can never read vaults, release switches or change the vetKD key.
+    pub operator: Option<Principal>,
+    /// Temporary pause of new orders set by the operator (ns), and when the
+    /// operator last paused (a cooldown keeps pauses short and rare).
+    pub paused_until: Option<u64>,
+    pub operator_paused_at: Option<u64>,
 }
 candid_storable!(Config);
 
@@ -105,6 +113,9 @@ impl Default for Config {
             xmr_usd_at: None,
             xmr_usd_readings: None,
             order_salt: None,
+            operator: None,
+            paused_until: None,
+            operator_paused_at: None,
         }
     }
 }

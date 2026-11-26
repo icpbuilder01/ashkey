@@ -154,6 +154,27 @@ fn admin() -> R<Principal> {
     Ok(p)
 }
 
+/// Controllers, or the operator (see `Config::operator`).
+fn operator() -> R<Principal> {
+    let p = msg_caller();
+    if is_controller(&p) || (p != Principal::anonymous() && config().operator == Some(p)) {
+        return Ok(p);
+    }
+    Err("Operator only.".into())
+}
+
+/// Longest pause of new orders the operator can set, and the minimum time
+/// between two operator pauses: renewals stay possible well within the
+/// 7-day vault grace period.
+const OPERATOR_PAUSE_MAX: u64 = 48 * 3600 * SEC;
+const OPERATOR_PAUSE_COOLDOWN: u64 = 7 * DAY;
+/// The operator cannot raise a price above this multiple of the launch price.
+const OPERATOR_PRICE_CAP: u64 = 3;
+
+fn orders_paused(cfg: &Config, now: u64) -> bool {
+    cfg.paused || cfg.paused_until.is_some_and(|u| u > now)
+}
+
 fn sha256(b: &[u8]) -> Vec<u8> {
     Sha256::digest(b).to_vec()
 }
@@ -513,7 +534,7 @@ fn get_info() -> Info {
         version: VERSION.into(),
         network: cfg.network.clone(),
         payments_ready: xmr::view_pair(&cfg).is_ok() && cfg.nodes.len() >= 2,
-        paused: cfg.paused,
+        paused: orders_paused(&cfg, time()),
         vault_prices: usd_vault(&cfg).iter().map(|u| fresh_rate(&cfg, time()).map_or(0, |r| price::quote(*u, r))).collect(),
         heritage_price: fresh_rate(&cfg, time()).map_or(0, |r| price::quote(usd_heritage(&cfg), r)),
         usd_vault_prices: usd_vault(&cfg),
@@ -575,7 +596,7 @@ fn me() -> AccountView {
 fn create_order(product: Product, years: u8) -> R<OrderView> {
     let p = caller()?;
     let cfg = config();
-    if cfg.paused {
+    if orders_paused(&cfg, time()) {
         return Err("New orders are paused for maintenance. Existing accounts are not affected.".into());
     }
     if !(1..=3).contains(&years) {
@@ -1328,7 +1349,7 @@ fn transform_coingecko(args: TransformArgs) -> HttpRequestResult {
 /// check it matches the wallet they control.
 #[ic_cdk::update]
 fn admin_set_wallet(view_key_hex: String, spend_public_key_hex: String, network: String) -> R<String> {
-    admin()?;
+    operator()?;
     let view = hex::decode(view_key_hex.trim()).map_err(|_| "view key: not hex")?;
     let spend = hex::decode(spend_public_key_hex.trim()).map_err(|_| "spend key: not hex")?;
     if !["mainnet", "stagenet", "testnet"].contains(&network.as_str()) {
@@ -1349,9 +1370,15 @@ fn admin_set_wallet(view_key_hex: String, spend_public_key_hex: String, network:
 
 #[ic_cdk::update]
 fn admin_set_nodes(nodes: Vec<String>) -> R<()> {
-    admin()?;
+    operator()?;
     if nodes.iter().any(|n| !n.starts_with("https://")) {
         return Err("Nodes must be https:// URLs.".into());
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    let nodes: Vec<String> = nodes.into_iter().map(|n| n.trim().trim_end_matches('/').to_string()).filter(|n| seen.insert(n.clone())).collect();
+    let operators: std::collections::BTreeSet<String> = nodes.iter().map(|n| xmr::node_operator(n)).collect();
+    if nodes.len() < 3 || operators.len() < 2 {
+        return Err("At least 3 nodes, run by at least 2 different domains.".into());
     }
     update_config(|c| c.nodes = nodes);
     Ok(())
@@ -1360,9 +1387,13 @@ fn admin_set_nodes(nodes: Vec<String>) -> R<()> {
 /// Yearly prices in US cents (vault tiers 1..3, heritage). Paid plans are not affected.
 #[ic_cdk::update]
 fn admin_set_usd_prices(vault: Vec<u64>, heritage: u64) -> R<()> {
-    admin()?;
+    operator()?;
     if vault.len() != 3 || vault.iter().any(|v| *v == 0) || heritage == 0 {
         return Err("Three non-zero vault prices and a heritage price, in US cents.".into());
+    }
+    let capped = vault.iter().zip(DEFAULT_USD_VAULT).all(|(v, d)| *v <= d * OPERATOR_PRICE_CAP) && heritage <= DEFAULT_USD_HERITAGE * OPERATOR_PRICE_CAP;
+    if !capped && !is_controller(&msg_caller()) {
+        return Err("The operator cannot set a price above 3x the launch price.".into());
     }
     update_config(|c| {
         c.usd_vault_prices = Some(vault);
@@ -1374,18 +1405,21 @@ fn admin_set_usd_prices(vault: Vec<u64>, heritage: u64) -> R<()> {
 /// Reads the price sources now. Returns the agreed rate (if any) and the raw readings.
 #[ic_cdk::update]
 async fn admin_refresh_price() -> R<(Option<u64>, Vec<u64>)> {
-    admin()?;
+    operator()?;
     Ok(refresh_price().await)
 }
 
 /// Emergency fallback when the feeds are down: sets the rate by hand (US cents per XMR).
 #[ic_cdk::update]
 fn admin_set_xmr_rate(cents: u64) -> R<()> {
-    admin()?;
+    operator()?;
     if !(100..=10_000_000).contains(&cents) {
         return Err("Rate in US cents per XMR, between $1 and $100,000.".into());
     }
     let now = time();
+    if fresh_rate(&config(), now).is_some() && !is_controller(&msg_caller()) {
+        return Err("The price feeds work: the operator can only set the rate while they are down.".into());
+    }
     update_config(|c| {
         c.xmr_usd_cents = Some(cents);
         c.xmr_usd_at = Some(now);
@@ -1410,11 +1444,52 @@ fn admin_set_params(min_confirmations: u32, key_name: String, paused: bool) -> R
     Ok(())
 }
 
+/// Sets or removes the operator. The current operator can hand over or give up
+/// the role, so it keeps working after the controllers are removed.
+#[ic_cdk::update]
+fn admin_set_operator(new: Option<Principal>) -> R<()> {
+    operator()?;
+    if new == Some(Principal::anonymous()) {
+        return Err("Not the anonymous principal.".into());
+    }
+    update_config(|c| c.operator = new);
+    Ok(())
+}
+
+/// Pauses new orders for `hours` (0 lifts the pause). Existing accounts, payment
+/// checks, check-ins and switches are never affected. The operator can pause at
+/// most 48 h, once every 7 days.
+#[ic_cdk::update]
+fn admin_pause_orders(hours: u32) -> R<()> {
+    let p = operator()?;
+    let now = time();
+    if hours == 0 {
+        update_config(|c| c.paused_until = None);
+        return Ok(());
+    }
+    let span = hours as u64 * 3600 * SEC;
+    if !is_controller(&p) {
+        if span > OPERATOR_PAUSE_MAX {
+            return Err("The operator can pause new orders for 48 hours at most.".into());
+        }
+        if config().operator_paused_at.is_some_and(|at| now < at + OPERATOR_PAUSE_COOLDOWN) {
+            return Err("The operator can pause new orders once every 7 days.".into());
+        }
+    }
+    update_config(|c| {
+        c.paused_until = Some(now + span);
+        if !is_controller(&p) {
+            c.operator_paused_at = Some(now);
+        }
+    });
+    Ok(())
+}
+
 /// Gives a plan without payment (support cases, tests). It can only add time
 /// to an account; it cannot read or move anything.
 #[ic_cdk::update]
 fn admin_grant(account: Principal, product: Product, years: u8) -> R<()> {
-    admin()?;
+    operator()?;
     product_usd(&config(), &product)?;
     if !(1..=3).contains(&years) {
         return Err("1 to 3 years.".into());
@@ -1436,7 +1511,7 @@ fn admin_set_min_interval(sec: Option<u64>) -> R<()> {
 
 #[ic_cdk::query]
 fn admin_stats() -> R<Stats> {
-    admin()?;
+    operator()?;
     let (orders, paid, received) = ORDERS.with(|m| {
         let m = m.borrow();
         let mut paid = 0;
@@ -1470,7 +1545,7 @@ fn inspect() {
     let m = msg_method_name();
     let p = msg_caller();
     let ok = if m.starts_with("admin_") {
-        is_controller(&p)
+        is_controller(&p) || (p != Principal::anonymous() && config().operator == Some(p))
     } else if m == "heir_open" {
         true
     } else {
